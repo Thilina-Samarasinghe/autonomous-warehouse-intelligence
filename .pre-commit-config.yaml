@@ -1,0 +1,27 @@
+# Local hooks only: they reuse the tool versions locked in backend/uv.lock and
+# frontend/package-lock.json, so nothing extra is downloaded.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --project backend ruff check --fix
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --project backend ruff format
+        language: system
+        types: [python]
+      - id: mypy
+        name: mypy
+        entry: bash -c 'cd backend && uv run mypy'
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: frontend-lint
+        name: oxlint (frontend)
+        entry: bash -c 'cd frontend && npm run --silent lint'
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false

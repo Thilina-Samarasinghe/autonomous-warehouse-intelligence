@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Node
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Experiment outputs
+results/
+*.parquet
+*.duckdb
+.ipynb_checkpoints/
+
+# Env / editor / OS
+.env
+.env.*
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
