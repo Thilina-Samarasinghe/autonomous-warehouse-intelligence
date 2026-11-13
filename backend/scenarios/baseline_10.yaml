@@ -1,0 +1,7 @@
+# 10 robots, moderate demand: the fleet keeps up.
+seed: 0
+num_robots: 10
+task_rate: 0.15
+zipf_s: 1.0
+pick_ticks: 2
+drop_ticks: 1

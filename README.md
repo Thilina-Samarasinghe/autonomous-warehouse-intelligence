@@ -44,6 +44,15 @@ npm install
 npm run dev                  # dashboard on http://localhost:5173 (proxies /api to the backend)
 ```
 
+Run a headless simulation from the command line:
+
+```bash
+cd backend
+uv run awi-sim --robots 10 --ticks 2000                      # summary only
+uv run awi-sim --robots 4 --ticks 100 --render-every 25      # ASCII map frames
+uv run awi-sim --config scenarios/stress_30.yaml --ticks 3000
+```
+
 Optional analysis tools (pandas, DuckDB, Plotly, JupyterLab):
 
 ```bash
@@ -72,7 +81,7 @@ CI (GitHub Actions) runs the same checks on every push and pull request.
 ## Roadmap
 
 - [x] Phase 0: project setup, tooling, CI
-- [ ] Phase 1: core simulation engine
+- [x] Phase 1: core simulation engine
 - [ ] Phase 2: Dijkstra + A\* (independent planning)
 - [ ] Phase 3: metrics + headless experiment runner
 - [ ] Phase 4: Space-Time A\*, Prioritized Planning, CBS

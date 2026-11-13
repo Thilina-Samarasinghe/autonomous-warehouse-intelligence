@@ -1,0 +1,8 @@
+# 30 robots under heavy, skewed demand. Independent planning gridlocks in the
+# aisle of the hottest shelf; the coordinated planner (phase 4) must resolve this.
+seed: 0
+num_robots: 30
+task_rate: 0.6
+zipf_s: 1.0
+pick_ticks: 2
+drop_ticks: 1
