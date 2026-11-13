@@ -50,7 +50,34 @@ At 10 robots the fleet has spare capacity, so throughput is capped by the order 
 
 ---
 
-## 2. Independent-planning baseline (phase 3, re-run with parking)
+## 2. Task assignment strategies (phase 5)
+
+```bash
+uv run awi-exp run scenarios/experiments/assignment.yaml --workers 6     # ~5 min
+```
+
+**Setup:** prioritized planning (coordinated, 0 conflicts in every run), **heavier load** of 0.022 tasks/tick per robot, so that assignment decisions matter. Batching robots carry up to **2 items per trip**; all other assigners carry 1. 10 seeds per cell.
+
+| Robots | Assigner | Throughput / 1k (95% CI) | Completion | Avg delivery | P95 delivery | Wait for a robot | Distance / delivery |
+|---:|---|---|---:|---:|---:|---:|---:|
+| 10 | Greedy (FIFO, Manhattan) | 191.4 [187.0, 195.8] | 86% | 215.0 | 363.2 | 168.8 | 42.6 |
+| 10 | Hungarian | 200.8 [196.0, 205.5] | 91% | 155.3 | 278.1 | 110.3 | 39.8 |
+| 10 | CP-SAT | 200.3 [195.9, 204.7] | 90% | 157.7 | 281.3 | 112.8 | 39.7 |
+| 10 | **OR-Tools batching** | **216.8** [210.9, 222.7] | **98%** | **63.2** | **108.5** | **6.2** | **33.8** |
+| 20 | Greedy | 271.6 [263.1, 280.1] | 61% | 606.5 | 997.4 | 551.6 | 59.2 |
+| 20 | Hungarian | 280.4 [272.9, 287.8] | 63% | 580.8 | 957.3 | 526.7 | 56.6 |
+| 20 | CP-SAT | 280.5 [272.7, 288.2] | 63% | 579.4 | 955.5 | 525.3 | 56.6 |
+| 20 | **OR-Tools batching** | **418.0** [407.8, 428.2] | **94%** | **133.6** | **229.2** | **52.0** | **35.9** |
+
+### Findings
+
+1. **Optimal matching beats greedy.** Hungarian raises throughput by 4.9% and cuts delivery time by 28% at 10 robots (p = 0.002, d = 0.74), because it uses true travel distances and optimises all robots jointly instead of serving tasks FIFO.
+2. **Hungarian and CP-SAT are interchangeable.** They reach the same optimum: a property test checks both against brute force, and they show no measurable difference on any KPI (p > 0.27). Individual runs differ only through tie-breaks between equally good matchings. CP-SAT is 10 to 15% slower, but it can take side constraints (eligibility, battery reserve, hard priorities) that Hungarian cannot express.
+3. **Batching changes the game under load.** Carrying 2 items per trip, the fleet serves **54% more orders at 20 robots** (418 vs 272 per 1k ticks, p = 0.002, d = 1.0). Average delivery time drops by **78%** (607 → 134 ticks) and distance per delivery by 39%. The 1-item strategies cannot keep up with the order rate (61 to 63% completion, a growing backlog). Batching serves 94% of orders.
+
+---
+
+## 3. Independent-planning baseline (phase 3, re-run with parking)
 
 ```bash
 uv run awi-exp run scenarios/experiments/baseline_sweep.yaml --workers 6

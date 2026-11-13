@@ -51,6 +51,7 @@ cd backend
 uv run awi-sim --robots 10 --ticks 2000                      # summary only
 uv run awi-sim --robots 4 --ticks 100 --render-every 25      # ASCII map frames
 uv run awi-sim --planner cbs --robots 10 --ticks 1000         # coordinated planning (also: prioritized)
+uv run awi-sim --planner prioritized --assigner batching --capacity 2 --ticks 1000  # OR-Tools order batching
 uv run awi-sim --config scenarios/stress_30.yaml --ticks 3000
 ```
 
@@ -60,7 +61,8 @@ Run batch experiments (parallel; results land in `backend/results/<name>/*.parqu
 cd backend
 uv run awi-exp run scenarios/experiments/smoke.yaml                  # seconds
 uv run awi-exp run scenarios/experiments/baseline_sweep.yaml --workers 6
-uv run awi-exp run scenarios/experiments/comparison.yaml --workers 6   # main experiment (~15 min)
+uv run awi-exp run scenarios/experiments/comparison.yaml --workers 6   # main experiment (~30 min)
+uv run awi-exp run scenarios/experiments/assignment.yaml --workers 6   # assignment strategies
 uv run awi-exp report results/baseline_sweep                         # tables + paired stats
 ```
 
@@ -98,7 +100,7 @@ CI (GitHub Actions) runs the same checks on every push and pull request.
 - [x] Phase 2: Dijkstra + A\* (independent planning)
 - [x] Phase 3: metrics + headless experiment runner
 - [x] Phase 4: Space-Time A\*, Prioritized Planning, CBS
-- [ ] Phase 5: task assignment (Hungarian, CP-SAT, VRP batching)
+- [x] Phase 5: task assignment (Hungarian, CP-SAT, VRP batching)
 - [ ] Phase 6: battery management
 - [ ] Phase 7: dynamic obstacles
 - [ ] Phase 8: FastAPI REST + WebSocket streaming

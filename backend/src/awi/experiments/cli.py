@@ -29,19 +29,32 @@ KEY_METRICS = [
 ]
 
 
+def strategy_column(runs: pd.DataFrame) -> str:
+    """The column that tells strategies apart: planner, assigner, or both combined."""
+    if "assigner" not in runs:
+        return "planner"
+    multi_planner = runs["planner"].nunique() > 1
+    multi_assigner = runs["assigner"].nunique() > 1
+    if multi_planner and multi_assigner:
+        runs["strategy"] = runs["planner"] + "+" + runs["assigner"]
+        return "strategy"
+    return "assigner" if multi_assigner else "planner"
+
+
 def _print_report(runs: pd.DataFrame, a: str | None, b: str | None) -> None:
-    summary = summarize(runs, KEY_METRICS)
+    col = strategy_column(runs)
+    summary = summarize(runs, KEY_METRICS, by=("num_robots", col))
     table = summary.pivot_table(
-        index=["num_robots", "planner"], columns="metric", values="mean", sort=False
+        index=["num_robots", col], columns="metric", values="mean", sort=False
     )[KEY_METRICS]
     with pd.option_context("display.width", 200, "display.max_columns", 20, "display.precision", 3):
-        print("\nMean per (robots, planner):")
+        print(f"\nMean per (robots, {col}):")
         print(table.to_string())
-        planners = sorted(runs["planner"].unique())
-        if a is None and b is None and len(planners) == 2:
-            a, b = planners
+        strategies = sorted(runs[col].unique())
+        if a is None and b is None and len(strategies) == 2:
+            a, b = strategies
         if a and b:
-            cmp = compare(runs, a, b, KEY_METRICS)
+            cmp = compare(runs, a, b, KEY_METRICS, group_col=col)
             print(f"\nPaired comparison {a} vs {b} (diff = {a} - {b}):")
             cols = [
                 "num_robots",
@@ -69,8 +82,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_rep = sub.add_parser("report", help="summarize a results directory")
     p_rep.add_argument("results", type=Path)
     for p in (p_run, p_rep):
-        p.add_argument("--a", help="planner A for the paired comparison")
-        p.add_argument("--b", help="planner B for the paired comparison")
+        p.add_argument("--a", help="strategy A for the paired comparison")
+        p.add_argument("--b", help="strategy B for the paired comparison")
 
     args = parser.parse_args(argv)
     if args.cmd == "run":
@@ -85,7 +98,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         def progress(i: int, n: int, res: RunResult) -> None:
             r = res.row
             print(
-                f"  [{i:>3}/{n}] {r['planner']:<18} robots={r['num_robots']:<3} "
+                f"  [{i:>3}/{n}] {r['planner']:<18} {r['assigner']:<10} "
+                f"robots={r['num_robots']:<3} "
                 f"seed={r['seed']:<3} throughput={r['throughput_per_1k']:.1f}/1k "
                 f"({r['wall_seconds']:.1f}s)",
                 flush=True,

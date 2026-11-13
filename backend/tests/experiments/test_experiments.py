@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from awi.experiments.cli import main as exp_main
+from awi.experiments.cli import strategy_column
 from awi.experiments.registry import make_planner, register_planner
 from awi.experiments.runner import ExperimentSpec, run_experiment, run_single
 from awi.experiments.stats import cliffs_delta, compare, mean_ci, summarize
@@ -136,3 +137,18 @@ def test_summarize_and_compare() -> None:
     assert c["wilcoxon_p"] < 0.01  # paired test sees the consistent shift
     same = compare(df.assign(x=1.0), "a", "b", ["x"]).iloc[0]
     assert same["wilcoxon_p"] == 1.0 and same["mannwhitney_p"] == 1.0
+
+
+def test_assigner_dimension_and_strategy_column() -> None:
+    spec = _spec(planners=["independent_astar"], assigners=["greedy", "hungarian"], robots=[3])
+    assert len(spec.runs()) == 2 * 2
+    res = run_experiment(spec, None, workers=1)
+    assert set(res.runs["assigner"]) == {"greedy", "hungarian"}
+    assert strategy_column(res.runs.copy()) == "assigner"
+    both = res.runs.copy()
+    both.loc[0, "planner"] = "x"
+    assert strategy_column(both) == "strategy"
+    cmp = compare(res.runs, "hungarian", "greedy", ["throughput_per_1k"], group_col="assigner")
+    assert cmp.iloc[0]["n_pairs"] == 2
+    with pytest.raises(ValidationError, match="unknown assigners"):
+        _spec(assigners=["nope"])

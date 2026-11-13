@@ -84,12 +84,14 @@ def compare(
     *,
     by: str = "num_robots",
     pair_on: str = "seed",
+    group_col: str = "planner",
 ) -> pd.DataFrame:
-    """Compare planner ``a`` against ``b``; ``diff`` and ``rel_change`` are a - b."""
+    """Compare strategy ``a`` against ``b`` (values of ``group_col``, e.g. planner or
+    assigner); ``diff`` and ``rel_change`` are a - b."""
     rows = []
     for key, group in runs.groupby(by, sort=True):
-        ga = group[group["planner"] == a].set_index(pair_on)
-        gb = group[group["planner"] == b].set_index(pair_on)
+        ga = group[group[group_col] == a].set_index(pair_on)
+        gb = group[group[group_col] == b].set_index(pair_on)
         common = ga.index.intersection(gb.index)
         for metric in metrics:
             xa = ga.loc[common, metric].to_numpy(dtype=np.float64)

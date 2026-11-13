@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from awi.core.config import SimConfig
 from awi.core.engine import Simulation
 from awi.core.render import render_ascii
+from awi.experiments.registry import make_assigner
 from awi.planning.base import PathPlanner
 from awi.planning.coordinated import CBSPlanner, PrioritizedPlanner
 from awi.planning.independent import IndependentAStarPlanner
@@ -35,6 +36,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="A* cost of entering pick-aisle cells (>1 discourages through-traffic)",
     )
     p.add_argument(
+        "--assigner",
+        choices=["greedy", "hungarian", "cpsat", "batching"],
+        default="greedy",
+        help="task assigner (default: greedy)",
+    )
+    p.add_argument("--capacity", type=int, help="items per robot trip (batching)")
+    p.add_argument(
         "--render-every", type=int, default=0, metavar="N", help="print the map every N ticks"
     )
     return p
@@ -45,7 +53,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     cfg = SimConfig.from_yaml(args.config) if args.config else SimConfig()
     overrides = {
         k: v
-        for k, v in {"num_robots": args.robots, "seed": args.seed, "task_rate": args.rate}.items()
+        for k, v in {
+            "num_robots": args.robots,
+            "seed": args.seed,
+            "task_rate": args.rate,
+            "capacity": args.capacity,
+        }.items()
         if v is not None
     }
     cfg = SimConfig.model_validate(cfg.model_dump() | overrides)
@@ -59,7 +72,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         planner = CBSPlanner()
     else:
         planner = IndependentAStarPlanner(seed=cfg.seed, pick_cell_cost=args.pick_cost)
-    sim = Simulation(cfg, planner=planner)
+    sim = Simulation(cfg, planner=planner, assigner=make_assigner(args.assigner, cfg))
     start = time.perf_counter()
     for _ in range(args.ticks):
         sim.step()
@@ -70,7 +83,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     s = sim.summary()
     avg = f"{s.avg_delivery_time:.1f}" if s.avg_delivery_time is not None else "n/a"
     print(
-        f"planner={args.planner} robots={cfg.num_robots} seed={cfg.seed} "
+        f"planner={args.planner} assigner={args.assigner} "
+        f"robots={cfg.num_robots} seed={cfg.seed} "
         f"ticks={s.ticks} ({s.ticks / elapsed:,.0f}/s)"
     )
     print(

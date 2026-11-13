@@ -27,7 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from awi.core.config import SimConfig
 from awi.core.engine import Simulation
-from awi.experiments.registry import PLANNERS, make_planner
+from awi.experiments.registry import ASSIGNERS, PLANNERS, make_assigner, make_planner
 from awi.metrics.collector import MetricsCollector, MetricsConfig
 
 
@@ -37,6 +37,7 @@ class ExperimentSpec(BaseModel):
     name: str = Field(pattern=r"^[A-Za-z0-9_\-]+$")
     description: str = ""
     planners: list[str] = Field(min_length=1)
+    assigners: list[str] = Field(default_factory=lambda: ["greedy"], min_length=1)
     robots: list[int] = Field(default_factory=lambda: [10], min_length=1)
     seeds: int | list[int] = Field(10, description="Count (0..n-1) or explicit list")
     ticks: int = Field(3000, ge=1)
@@ -54,6 +55,14 @@ class ExperimentSpec(BaseModel):
         unknown = [p for p in v if p not in PLANNERS]
         if unknown:
             raise ValueError(f"unknown planners {unknown}; choose from {sorted(PLANNERS)}")
+        return v
+
+    @field_validator("assigners")
+    @classmethod
+    def _known_assigners(cls, v: list[str]) -> list[str]:
+        unknown = [a for a in v if a not in ASSIGNERS]
+        if unknown:
+            raise ValueError(f"unknown assigners {unknown}; choose from {sorted(ASSIGNERS)}")
         return v
 
     @property
@@ -74,19 +83,21 @@ class ExperimentSpec(BaseModel):
                 cfg = self.base.model_copy(update=overrides)
                 SimConfig.model_validate(cfg.model_dump())  # re-validate overrides
                 for planner in self.planners:
-                    out.append(
-                        RunSpec(
-                            experiment=self.name,
-                            planner=planner,
-                            config=cfg.model_dump(),
-                            ticks=self.ticks,
-                            metrics=MetricsConfig(
-                                warmup_ticks=self.warmup_ticks,
-                                window=self.window,
-                                deadlock_ticks=self.deadlock_ticks,
-                            ),
+                    for assigner in self.assigners:
+                        out.append(
+                            RunSpec(
+                                experiment=self.name,
+                                planner=planner,
+                                assigner=assigner,
+                                config=cfg.model_dump(),
+                                ticks=self.ticks,
+                                metrics=MetricsConfig(
+                                    warmup_ticks=self.warmup_ticks,
+                                    window=self.window,
+                                    deadlock_ticks=self.deadlock_ticks,
+                                ),
+                            )
                         )
-                    )
         return out
 
 
@@ -99,6 +110,7 @@ class RunSpec:
     config: dict[str, Any]
     ticks: int
     metrics: MetricsConfig
+    assigner: str = "greedy"
 
 
 @dataclass(slots=True)
@@ -116,7 +128,11 @@ class ExperimentResult:
 
 def run_single(spec: RunSpec) -> RunResult:
     cfg = SimConfig.model_validate(spec.config)
-    sim = Simulation(cfg, planner=make_planner(spec.planner, cfg))
+    sim = Simulation(
+        cfg,
+        planner=make_planner(spec.planner, cfg),
+        assigner=make_assigner(spec.assigner, cfg),
+    )
     collector = MetricsCollector(sim, spec.metrics)
     t0 = time.perf_counter()
     for _ in range(spec.ticks):
@@ -126,6 +142,7 @@ def run_single(spec: RunSpec) -> RunResult:
     keys = {
         "experiment": spec.experiment,
         "planner": spec.planner,
+        "assigner": spec.assigner,
         "num_robots": cfg.num_robots,
         "seed": cfg.seed,
         "task_rate": cfg.task_rate,
@@ -179,7 +196,7 @@ def run_experiment(
                 if progress:
                     progress(i, len(runs), res)
 
-    order = ["num_robots", "seed", "planner"]
+    order = ["num_robots", "seed", "planner", "assigner"]
     runs_df = pd.DataFrame([r.row for r in results]).sort_values(order, ignore_index=True)
     ts_df = pd.DataFrame([w for r in results for w in r.series])
     if not ts_df.empty:

@@ -6,6 +6,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+from awi.core.route import Stop
 from awi.core.types import Cell, RobotId, TaskId
 
 
@@ -36,14 +37,16 @@ class Robot:
     id: RobotId
     pos: Cell
     state: RobotState = RobotState.IDLE
-    task_id: TaskId | None = None
+    stops: deque[Stop] = field(default_factory=deque)
+    """Remaining route; ``stops[0]`` is the stop the robot is heading to / serving."""
+    cargo: set[TaskId] = field(default_factory=set)
+    """Tasks picked but not yet dropped."""
     goal: Cell | None = None
     path: deque[Cell] = field(default_factory=deque)
     """Planned future cells, one per tick (a repeated cell is a planned wait)."""
     needs_replan: bool = False
     service_left: int = 0
     stuck_ticks: int = 0
-    carrying: bool = False
     battery: float = 100.0
 
     # cumulative counters
@@ -59,3 +62,17 @@ class Robot:
     @property
     def is_moving_state(self) -> bool:
         return self.state in MOVING_STATES
+
+    @property
+    def task_id(self) -> TaskId | None:
+        """Task of the current stop (``None`` without a route)."""
+        return self.stops[0].task_id if self.stops else None
+
+    @property
+    def carrying(self) -> bool:
+        return bool(self.cargo)
+
+    @property
+    def route_tasks(self) -> set[TaskId]:
+        """Every task this robot is responsible for (cargo + still to pick)."""
+        return {s.task_id for s in self.stops} | self.cargo

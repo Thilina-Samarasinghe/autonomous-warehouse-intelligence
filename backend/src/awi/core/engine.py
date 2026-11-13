@@ -34,6 +34,7 @@ from awi.core.layout import Layout, generate_layout
 from awi.core.orders import TaskGenerator
 from awi.core.rng import make_rng
 from awi.core.robot import FREE_STATES, MOVING_STATES, PATH_STATES, Robot, RobotState
+from awi.core.route import Route, StopKind, route_tasks, single_task_route, validate_route
 from awi.core.task import TaskStatus
 from awi.core.types import Cell, RobotId, TaskId, manhattan
 from awi.core.world import World
@@ -163,17 +164,32 @@ class Simulation:
 
         idle_ids = {r.id for r in idle}
         pending_ids = set(self.world.pending)
-        if len(set(assignment.values())) != len(assignment):
+        routes: dict[RobotId, Route] = {}
+        for rid, value in assignment.items():
+            if isinstance(value, int):
+                if value not in pending_ids:
+                    raise SimulationError(f"illegal assignment robot={rid} task={value}")
+                routes[rid] = single_task_route(self.world.tasks[value])
+            else:
+                routes[rid] = tuple(value)
+        used = [tid for route in routes.values() for tid in route_tasks(route)]
+        if len(used) != len(set(used)):
             raise SimulationError("assigner gave one task to several robots")
-        for rid, tid in sorted(assignment.items()):
-            if rid not in idle_ids or tid not in pending_ids:
-                raise SimulationError(f"illegal assignment robot={rid} task={tid}")
-            robot, task = self.world.robots[rid], self.world.tasks[tid]
-            task.status, task.robot_id, task.assigned_t = TaskStatus.ASSIGNED, rid, self.world.t
-            robot.task_id = tid
-            self._set_goal(robot, RobotState.TO_PICKUP, task.pickup)
-            report.assigned.append((rid, tid))
-        assigned = set(assignment.values())
+        for rid, route in sorted(routes.items()):
+            if rid not in idle_ids or not set(route_tasks(route)) <= pending_ids:
+                raise SimulationError(f"illegal assignment robot={rid} route={route}")
+            try:
+                validate_route(route, self.world.tasks, self.config.capacity)
+            except ValueError as exc:
+                raise SimulationError(f"invalid route for robot {rid}: {exc}") from None
+            robot = self.world.robots[rid]
+            for tid in route_tasks(route):
+                task = self.world.tasks[tid]
+                task.status, task.robot_id, task.assigned_t = TaskStatus.ASSIGNED, rid, self.world.t
+                report.assigned.append((rid, tid))
+            robot.stops = deque(route)
+            self._head_to_next_stop(robot)
+        assigned = set(used)
         self.world.pending = [tid for tid in self.world.pending if tid not in assigned]
 
     def _park_idle_robots(self) -> None:
@@ -275,20 +291,29 @@ class Simulation:
 
     # ---------------------------------------------------------------- helpers
     def _finish_service(self, r: Robot, report: TickReport) -> None:
-        assert r.task_id is not None
-        task = self.world.tasks[r.task_id]
+        stop = r.stops.popleft()
+        task = self.world.tasks[stop.task_id]
         t = self.world.t
-        if r.state is RobotState.PICKING:
+        if stop.kind is StopKind.PICK:
             task.status, task.picked_t = TaskStatus.PICKED, t
-            r.carrying = True
-            self._set_goal(r, RobotState.TO_DROP, task.dropoff)
+            r.cargo.add(task.id)
             report.picked.append(task.id)
-        elif r.state is RobotState.DROPPING:
+        else:
             task.status, task.delivered_t = TaskStatus.DELIVERED, t
-            r.carrying, r.task_id, r.goal = False, None, None
-            r.state = RobotState.IDLE
+            r.cargo.discard(task.id)
             r.deliveries += 1
             report.delivered.append(task.id)
+        self._head_to_next_stop(r)
+
+    def _head_to_next_stop(self, r: Robot) -> None:
+        """Set state and goal from the route's next stop (or go idle when done)."""
+        if not r.stops:
+            r.state, r.goal = RobotState.IDLE, None
+            r.path.clear()
+            return
+        stop = r.stops[0]
+        state = RobotState.TO_PICKUP if stop.kind is StopKind.PICK else RobotState.TO_DROP
+        self._set_goal(r, state, stop.cell)
 
     @staticmethod
     def _set_goal(r: Robot, state: RobotState, goal: Cell) -> None:

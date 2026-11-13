@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from awi.assignment.base import TaskAssigner
+from awi.assignment.batching_vrp import BatchingAssigner
+from awi.assignment.greedy import GreedyNearestAssigner
+from awi.assignment.hungarian import HungarianAssigner
+from awi.assignment.ortools_cpsat import CPSATAssigner
 from awi.core.config import SimConfig
 from awi.planning.base import PathPlanner
 from awi.planning.coordinated import CBSPlanner, PrioritizedPlanner
@@ -18,6 +23,24 @@ PLANNERS: dict[str, PlannerFactory] = {
     "prioritized": lambda cfg: PrioritizedPlanner(),
     "cbs": lambda cfg: CBSPlanner(),
 }
+
+
+AssignerFactory = Callable[[SimConfig], TaskAssigner]
+
+ASSIGNERS: dict[str, AssignerFactory] = {
+    "greedy": lambda cfg: GreedyNearestAssigner(),
+    "hungarian": lambda cfg: HungarianAssigner(),
+    "cpsat": lambda cfg: CPSATAssigner(),
+    "batching": lambda cfg: BatchingAssigner(capacity=cfg.capacity),
+}
+
+
+def make_assigner(name: str, cfg: SimConfig) -> TaskAssigner:
+    try:
+        factory = ASSIGNERS[name]
+    except KeyError:
+        raise ValueError(f"unknown assigner {name!r}; choose from {sorted(ASSIGNERS)}") from None
+    return factory(cfg)
 
 
 def register_planner(name: str, factory: PlannerFactory) -> None:

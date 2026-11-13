@@ -26,6 +26,7 @@ class SimConfig(BaseModel):
     stuck_replan_ticks: int = Field(
         3, ge=1, description="Replan around other robots after being blocked this long"
     )
+    capacity: int = Field(1, ge=1, le=10, description="Items a robot can carry per trip")
     park_idle: bool = Field(
         True, description="Idle robots on a station/pick point drive to a parking cell"
     )
