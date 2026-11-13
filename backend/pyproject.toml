@@ -1,9 +1,16 @@
 [project]
 name = "awi"
-version = "0.1.0"
+version = "1.0.0"
 description = "Autonomous Warehouse Intelligence - multi-robot fleet simulator with coordinated planning"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
+authors = [{ name = "Thilina Samarasinghe" }]
+keywords = ["multi-agent pathfinding", "warehouse robotics", "conflict-based search", "simulation", "or-tools"]
+classifiers = [
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 dependencies = [
     "numpy>=2.0",
     "scipy>=1.13",
@@ -16,6 +23,10 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
 ]
+
+[project.urls]
+Repository = "https://github.com/Thilina-Samarasinghe/autonomous-warehouse-intelligence"
+Report = "https://github.com/Thilina-Samarasinghe/autonomous-warehouse-intelligence/blob/development/docs/REPORT.md"
 
 [project.optional-dependencies]
 report = [
@@ -38,6 +49,7 @@ dev = [
     "mypy>=1.10",
     "types-pyyaml",
     "pre-commit>=3.7",
+    "matplotlib>=3.8",  # figure tests (awi-exp figures)
 ]
 
 [project.scripts]

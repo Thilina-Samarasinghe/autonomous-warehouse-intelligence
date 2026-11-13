@@ -1,5 +1,7 @@
 # Autonomous Warehouse Intelligence — Implementation Plan
 
+> **Status (v1.0.0):** all phases are complete. This is the original plan, kept for reference. Changes from it: Docker Compose was dropped in favour of the one-command scripts in `scripts/`, and the results are in [RESULTS.md](RESULTS.md) and [REPORT.md](REPORT.md).
+
 A virtual warehouse where 10–30 autonomous robots get tasks, pick up packages, move between shelves, deliver orders and recharge, all without colliding or blocking each other. The main experiment compares **independent pathfinding** with **coordinated planning**.
 
 ---

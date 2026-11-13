@@ -1,8 +1,9 @@
 # One-command demo (Windows PowerShell): starts the API and the dashboard,
 # then opens the browser. Press Ctrl+C in this window to stop both.
 #
-#   powershell -ExecutionPolicy Bypass -File scripts\demo.ps1
+#   powershell -ExecutionPolicy Bypass -File scripts\demo.ps1 [-NoBrowser]
 #
+param([switch]$NoBrowser)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 
@@ -36,7 +37,7 @@ try {
             break
         } catch { Start-Sleep -Seconds 1 }
     }
-    Start-Process 'http://localhost:5173'
+    if (-not $NoBrowser) { Start-Process 'http://localhost:5173' }
     Write-Host 'Demo running. Open the Compare tab and pick a "Demo scenario". Ctrl+C to stop.' -ForegroundColor Green
     Wait-Process -Id $api.Id
 } finally {

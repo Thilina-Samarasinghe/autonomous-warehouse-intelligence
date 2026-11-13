@@ -259,4 +259,4 @@ Full tables with confidence intervals and every pairwise test are in [RESULTS.md
 
 Python 3.12 · NumPy 2.5 · SciPy 1.18 · NetworkX 3.7 · OR-Tools 9.15 · pandas 3.1 · Pydantic 2.14 · FastAPI 0.162 · matplotlib 3.11 · React 19 · TypeScript 7 · Vite 8 · Plotly.js 3.7.
 
-Codebase: about 5,800 lines of backend code in 56 modules, 2,600 lines of tests (190+ backend tests including Hypothesis property tests, 97% coverage, `mypy --strict`), and 2,800 lines of dashboard code with Vitest unit tests.
+Codebase: about 5,800 lines of backend code in 56 modules, 2,600 lines of tests (190+ backend tests including Hypothesis property tests, 95% coverage, `mypy --strict`), and 2,800 lines of dashboard code with Vitest unit tests.

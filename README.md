@@ -3,7 +3,7 @@
 [![CI](https://github.com/Thilina-Samarasinghe/autonomous-warehouse-intelligence/actions/workflows/ci.yml/badge.svg?branch=development)](https://github.com/Thilina-Samarasinghe/autonomous-warehouse-intelligence/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
 ![Tests](https://img.shields.io/badge/tests-190%2B%20passing-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen)
 ![Typed](https://img.shields.io/badge/mypy-strict-blue)
 
 A simulator and research platform for **fleets of 10–30 autonomous warehouse robots**. Robots receive orders, drive to shelves, pick items, deliver them to packing stations, recharge their batteries, and avoid people and blocked aisles. They do all of this without colliding or deadlocking.
@@ -28,6 +28,10 @@ The project answers it with a reproducible experiment pipeline: identical order 
 All differences: Wilcoxon signed-rank p = 0.002, Cliff's |d| ≈ 1.0.
 
 📄 **[Final report](docs/REPORT.md)**: research questions, methods, figures, discussion and threats to validity · 📊 **[Full results tables](docs/RESULTS.md)** · 🎬 **[Demo guide](docs/DEMO.md)**
+
+![Demo: 30 robots on the same seed. Left, independent A* jams in one aisle and stops delivering; right, prioritized planning keeps the fleet flowing](docs/images/demo.gif)
+
+*30 robots, same warehouse, same orders. **Left:** independent A\*: robots jam nose-to-tail in one aisle and deliveries stop for good. **Right:** coordinated prioritized planning keeps delivering. (Dashboard → Compare → "Scaling stress" preset.)*
 
 ---
 
@@ -271,12 +275,21 @@ uv run awi-sim --robots 10 --ticks 1000     # first simulation
 
 > **Windows tip:** if `uv` is "not recognized" after installing it, add its folder to your user PATH and open a new terminal.
 
-Start the API and the dashboard (two terminals):
+**One-command demo:** starts the API and the dashboard and opens the browser (Ctrl+C stops both):
+
+```bash
+powershell -ExecutionPolicy Bypass -File scripts\demo.ps1     # Windows
+bash scripts/demo.sh                                          # macOS / Linux / Git Bash
+```
+
+Or start them yourself in two terminals:
 
 ```bash
 cd backend  && uv run awi-api          # http://127.0.0.1:8000/docs  (interactive API docs)
 cd frontend && npm install && npm run dev   # http://localhost:5173
 ```
+
+Then open the **Compare** tab and pick a **Demo scenario**. [docs/DEMO.md](docs/DEMO.md) has a full presenter's script.
 
 ---
 
@@ -412,7 +425,7 @@ docs/              implementation plan, results
 
 ## Quality and testing
 
-- **190+ tests, 97% coverage**, including property-based tests (Hypothesis) of the key invariants:
+- **190+ tests, 95% coverage**, including property-based tests (Hypothesis) of the key invariants:
   - robots never share a cell or swap places, under thousands of random scenarios;
   - A\* path length equals BFS on random maps;
   - Prioritized Planning and CBS solutions are conflict-free on random instances, and an optimally solved CBS plan never costs more than PP's;
@@ -460,7 +473,10 @@ npm test && npm run lint && npm run build
 | 8 · FastAPI REST + WebSocket streaming | ✅ |
 | 9 · Live dashboard (React + Canvas + Plotly) | ✅ |
 | 10 · Genetic algorithm for layout / SKU slotting | ✅ |
-| 11–12 · Final report, Docker, demo | ⏳ |
+| 11 · Final report, figures, reproducibility verification | ✅ |
+| 12 · Demo presets, one-command launchers, demo guide and GIF, v1.0.0 | ✅ |
+
+Docker packaging, part of the original plan, was intentionally left out: the one-command launch scripts cover the demo use case without adding a container toolchain.
 
 ---
 

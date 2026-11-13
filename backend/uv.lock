@@ -185,7 +185,7 @@ wheels = [
 
 [[package]]
 name = "awi"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
@@ -215,6 +215,7 @@ report = [
 dev = [
     { name = "httpx" },
     { name = "hypothesis" },
+    { name = "matplotlib" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -247,6 +248,7 @@ provides-extras = ["report", "analysis"]
 dev = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "hypothesis", specifier = ">=6.100" },
+    { name = "matplotlib", specifier = ">=3.8" },
     { name = "mypy", specifier = ">=1.10" },
     { name = "pre-commit", specifier = ">=3.7" },
     { name = "pytest", specifier = ">=8.2" },
