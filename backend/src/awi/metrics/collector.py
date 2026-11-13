@@ -75,6 +75,15 @@ class RunMetrics:
     plan_ms_total: float
     plan_ms_mean: float
     plan_ms_max: float
+    # energy (zero / NaN when battery management is off)
+    charging_frac: float = 0.0
+    charge_sessions: int = 0
+    energy_per_delivery: float = math.nan
+    min_battery_frac: float = math.nan
+    aborted_tasks: int = 0
+    energy_rejections: int = 0
+    stranded_robots: int = 0
+    preemptions: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -82,6 +91,9 @@ class RunMetrics:
 
 @dataclass(slots=True)
 class _Counters:
+    charging: int = 0
+    sessions: int = 0
+    energy: float = 0.0
     distance: int = 0
     idle: int = 0
     busy: int = 0
@@ -112,6 +124,11 @@ class MetricsCollector:
     _plan_calls: int = 0
     _plan_seconds: float = 0.0
     _plan_max: float = 0.0
+    _aborted: int = 0
+    _rejections: int = 0
+    _stranded: int = 0
+    _preempted: int = 0
+    _min_battery: float = math.inf
     _in_cycle_for: dict[RobotId, int] = field(default_factory=dict)
     _deadlock_events: int = 0
     _deadlocked_robot_ticks: int = 0
@@ -134,6 +151,14 @@ class MetricsCollector:
         self._plan_seconds += report.plan_seconds
         self._plan_max = max(self._plan_max, report.plan_seconds)
         self._track_deadlocks(report)
+        self._aborted += len(report.aborted_tasks)
+        self._rejections += report.energy_rejections
+        self._stranded += len(report.stranded)
+        self._preempted += len(report.preempted)
+        battery = self.sim.world.battery
+        if battery is not None:
+            low = min(r.battery for r in self.sim.world.robots.values()) / battery.capacity
+            self._min_battery = min(self._min_battery, low)
 
         w = self._window
         w.ticks += 1
@@ -195,6 +220,18 @@ class MetricsCollector:
             plan_ms_total=self._plan_seconds * 1e3,
             plan_ms_mean=1e3 * self._plan_seconds / self._plan_calls if self._plan_calls else 0.0,
             plan_ms_max=self._plan_max * 1e3,
+            charging_frac=(cur.charging - base.charging) / robot_ticks,
+            charge_sessions=cur.sessions - base.sessions,
+            energy_per_delivery=(
+                (cur.energy - base.energy) / len(delivered)
+                if delivered and world.battery is not None
+                else nan
+            ),
+            min_battery_frac=self._min_battery if math.isfinite(self._min_battery) else nan,
+            aborted_tasks=self._aborted,
+            energy_rejections=self._rejections,
+            stranded_robots=self._stranded,
+            preemptions=self._preempted,
         )
 
     def timeseries(self) -> list[dict[str, Any]]:
@@ -250,4 +287,7 @@ class MetricsCollector:
             c.busy += r.busy_ticks
             c.wait += r.wait_ticks
             c.blocked += r.blocked_ticks
+            c.charging += r.charging_ticks
+            c.sessions += r.charge_sessions
+            c.energy += r.energy_used
         return c

@@ -30,15 +30,15 @@ KEY_METRICS = [
 
 
 def strategy_column(runs: pd.DataFrame) -> str:
-    """The column that tells strategies apart: planner, assigner, or both combined."""
-    if "assigner" not in runs:
+    """The column that tells strategies apart: whichever of planner / assigner /
+    variant varies, or a combined ``strategy`` column if several do."""
+    varying = [c for c in ("planner", "assigner", "variant") if c in runs and runs[c].nunique() > 1]
+    if not varying:
         return "planner"
-    multi_planner = runs["planner"].nunique() > 1
-    multi_assigner = runs["assigner"].nunique() > 1
-    if multi_planner and multi_assigner:
-        runs["strategy"] = runs["planner"] + "+" + runs["assigner"]
-        return "strategy"
-    return "assigner" if multi_assigner else "planner"
+    if len(varying) == 1:
+        return varying[0]
+    runs["strategy"] = runs[varying].astype(str).agg("+".join, axis=1)
+    return "strategy"
 
 
 def _print_report(runs: pd.DataFrame, a: str | None, b: str | None) -> None:

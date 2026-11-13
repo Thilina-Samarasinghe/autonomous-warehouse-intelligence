@@ -38,6 +38,8 @@ from awi.core.route import Route, StopKind, route_tasks, single_task_route, vali
 from awi.core.task import TaskStatus
 from awi.core.types import Cell, RobotId, TaskId, manhattan
 from awi.core.world import World
+from awi.energy.battery import BatteryModel
+from awi.energy.charging import dispatch_chargers
 from awi.planning.base import PathPlanner, PathRequest
 from awi.planning.dijkstra import DistanceMaps
 from awi.planning.independent import IndependentAStarPlanner
@@ -63,6 +65,15 @@ class TickReport:
     """Wait-for graph: blocked robot -> robot holding the cell it wanted."""
     plan_calls: int = 0
     plan_seconds: float = 0.0
+    moved_robots: list[RobotId] = field(default_factory=list)
+    charges_started: list[RobotId] = field(default_factory=list)
+    aborted_tasks: list[TaskId] = field(default_factory=list)
+    """Unpicked tasks handed back to the queue by robots at critical battery."""
+    energy_rejections: int = 0
+    """Assignments refused because the robot could not afford the route."""
+    stranded: list[RobotId] = field(default_factory=list)
+    preempted: list[RobotId] = field(default_factory=list)
+    """Robots that left a charger early to make room for an emergency."""
 
 
 @dataclass(slots=True)
@@ -103,6 +114,19 @@ class Simulation:
             robots=self._spawn_robots(),
             distances=DistanceMaps.for_layout(self.layout),
         )
+        bcfg = self.config.battery
+        if bcfg.enabled:
+            self.world.battery = BatteryModel(
+                bcfg,
+                self.layout.chargers,
+                self.world.distances,
+                self.config.pick_ticks,
+                self.config.drop_ticks,
+            )
+            rng = make_rng(self.config.seed, "battery")
+            for rid in sorted(self.world.robots):
+                frac = rng.uniform(bcfg.initial_min, bcfg.initial_max)
+                self.world.robots[rid].battery = frac * bcfg.capacity
 
     # ------------------------------------------------------------------ public
     @property
@@ -115,11 +139,24 @@ class Simulation:
     def step(self) -> TickReport:
         report = TickReport(t=self.world.t)
         self._generate_tasks(report)
+        if self.world.battery is not None:
+            self._battery_policy(report)
         self._assign_tasks(report)
+        if self.world.battery is not None:
+            self._flag_unaffordable_robots()
+            dispatch = dispatch_chargers(self.world, self.layout.chargers, self.world.battery)
+            for victim in dispatch.preempted:
+                self._leave_charger(victim)
+                report.preempted.append(victim.id)
+            for robot, charger in dispatch.assignments:
+                self._set_goal(robot, RobotState.TO_CHARGER, charger)
+                report.charges_started.append(robot.id)
         if self.config.park_idle:
             self._park_idle_robots()
         self._plan_paths(report)
         self._move_robots(report)
+        if self.world.battery is not None:
+            self._drain_batteries(report)
         self._service_robots(report)
         for r in self.world.robots.values():
             if r.state in FREE_STATES:
@@ -175,6 +212,7 @@ class Simulation:
         used = [tid for route in routes.values() for tid in route_tasks(route)]
         if len(used) != len(set(used)):
             raise SimulationError("assigner gave one task to several robots")
+        accepted = dict(routes)
         for rid, route in sorted(routes.items()):
             if rid not in idle_ids or not set(route_tasks(route)) <= pending_ids:
                 raise SimulationError(f"illegal assignment robot={rid} route={route}")
@@ -183,13 +221,19 @@ class Simulation:
             except ValueError as exc:
                 raise SimulationError(f"invalid route for robot {rid}: {exc}") from None
             robot = self.world.robots[rid]
+            battery = self.world.battery
+            if battery is not None and not battery.can_afford(robot, route):
+                report.energy_rejections += 1
+                robot.needs_charge = True
+                del accepted[rid]
+                continue
             for tid in route_tasks(route):
                 task = self.world.tasks[tid]
                 task.status, task.robot_id, task.assigned_t = TaskStatus.ASSIGNED, rid, self.world.t
                 report.assigned.append((rid, tid))
             robot.stops = deque(route)
             self._head_to_next_stop(robot)
-        assigned = set(used)
+        assigned = {tid for route in accepted.values() for tid in route_tasks(route)}
         self.world.pending = [tid for tid in self.world.pending if tid not in assigned]
 
     def _park_idle_robots(self) -> None:
@@ -265,6 +309,7 @@ class Simulation:
                 r.distance += 1
                 r.stuck_ticks = 0
                 report.moved += 1
+                report.moved_robots.append(r.id)
 
     def _service_robots(self, report: TickReport) -> None:
         cfg = self.config
@@ -280,6 +325,12 @@ class Simulation:
                 r.path.clear()
                 if r.service_left <= 0:
                     self._finish_service(r, report)
+            elif r.state is RobotState.CHARGING:
+                self._charge(r)
+            elif r.state is RobotState.TO_CHARGER and r.pos == r.goal:
+                r.state, r.goal = RobotState.CHARGING, None
+                r.path.clear()
+                r.charge_sessions += 1
             elif r.state is RobotState.TO_PARK and r.pos == r.goal:
                 r.state, r.goal = RobotState.IDLE, None
                 r.path.clear()
@@ -304,6 +355,83 @@ class Simulation:
             r.deliveries += 1
             report.delivered.append(task.id)
         self._head_to_next_stop(r)
+
+    # --------------------------------------------------------------- battery
+    def _battery_policy(self, report: TickReport) -> None:
+        """Flag free robots below ``low``; at ``critical``, hand back unpicked work."""
+        battery = self.world.battery
+        assert battery is not None
+        cfg = battery.cfg
+        for r in self._robots():
+            if r.state in (RobotState.CHARGING, RobotState.TO_CHARGER, RobotState.STRANDED):
+                continue
+            if battery.is_emergency(r):
+                r.needs_charge = True  # cargo stays aboard; resumed after charging
+                if r.state in (RobotState.PICKING, RobotState.DROPPING):
+                    continue  # finish the current service first
+                if any(s.task_id not in r.cargo for s in r.stops):
+                    report.aborted_tasks.extend(self._release_unpicked(r))
+                    self._head_to_next_stop(r)
+            elif r.state in FREE_STATES and battery.fraction(r) < cfg.low:
+                r.needs_charge = True
+
+    def _flag_unaffordable_robots(self) -> None:
+        """A free robot left without work while orders wait, and unable to afford any
+        of the oldest ones, goes to charge instead of idling forever."""
+        battery = self.world.battery
+        assert battery is not None
+        if not self.world.pending:
+            return
+        oldest = self.world.pending_tasks()[:30]
+        for r in self.world.idle_robots():
+            if not any(battery.can_afford(r, single_task_route(t)) for t in oldest):
+                r.needs_charge = True
+
+    def _release_unpicked(self, r: Robot) -> list[TaskId]:
+        """Drop stops of tasks not yet picked and return those tasks to the queue."""
+        released = sorted({s.task_id for s in r.stops if s.task_id not in r.cargo})
+        r.stops = deque(s for s in r.stops if s.task_id in r.cargo)
+        for tid in released:
+            task = self.world.tasks[tid]
+            task.status, task.robot_id, task.assigned_t = TaskStatus.PENDING, None, None
+        self.world.pending = sorted(
+            [*self.world.pending, *released],
+            key=lambda tid: (self.world.tasks[tid].created_t, tid),
+        )
+        return released
+
+    def _drain_batteries(self, report: TickReport) -> None:
+        battery = self.world.battery
+        assert battery is not None
+        moved = set(report.moved_robots)
+        for r in self._robots():
+            if r.state in (RobotState.CHARGING, RobotState.STRANDED):
+                continue
+            cost = battery.tick_cost(r.id in moved, len(r.cargo))
+            r.energy_used += cost
+            r.battery -= cost
+            if r.battery <= 0:
+                r.battery = 0.0
+                self._release_unpicked(r)
+                r.state, r.goal = RobotState.STRANDED, None
+                r.path.clear()
+                report.stranded.append(r.id)
+
+    def _charge(self, r: Robot) -> None:
+        battery = self.world.battery
+        assert battery is not None
+        cfg = battery.cfg
+        r.battery = min(cfg.capacity, r.battery + cfg.charge_rate)
+        r.charging_ticks += 1
+        if r.battery >= cfg.resume * cfg.capacity:
+            self._leave_charger(r)
+
+    def _leave_charger(self, r: Robot) -> None:
+        r.needs_charge = False
+        if r.stops:  # emergency charge mid-route: resume the delivery
+            self._head_to_next_stop(r)
+        else:
+            r.state = RobotState.IDLE
 
     def _head_to_next_stop(self, r: Robot) -> None:
         """Set state and goal from the route's next stop (or go idle when done)."""

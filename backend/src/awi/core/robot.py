@@ -16,8 +16,10 @@ class RobotState(StrEnum):
     PICKING = "picking"
     TO_DROP = "to_drop"
     DROPPING = "dropping"
-    TO_CHARGER = "to_charger"  # used from phase 6 (battery management)
+    TO_CHARGER = "to_charger"
     CHARGING = "charging"
+    STRANDED = "stranded"
+    """Battery empty: the robot can no longer move (a policy failure, should be 0)."""
     TO_PARK = "to_park"
     """No task: clearing a station or pick point. Can be re-tasked at any time."""
 
@@ -48,6 +50,8 @@ class Robot:
     service_left: int = 0
     stuck_ticks: int = 0
     battery: float = 100.0
+    needs_charge: bool = False
+    """Flagged by the battery policy: no new work until charged."""
 
     # cumulative counters
     distance: int = 0
@@ -58,6 +62,9 @@ class Robot:
     blocked_ticks: int = 0
     """Ticks where the intended move was rejected because of another robot."""
     deliveries: int = 0
+    charging_ticks: int = 0
+    charge_sessions: int = 0
+    energy_used: float = 0.0
 
     @property
     def is_moving_state(self) -> bool:

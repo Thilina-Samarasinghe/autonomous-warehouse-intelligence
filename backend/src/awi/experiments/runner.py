@@ -31,6 +31,10 @@ from awi.experiments.registry import ASSIGNERS, PLANNERS, make_assigner, make_pl
 from awi.metrics.collector import MetricsCollector, MetricsConfig
 
 
+def _default_variants() -> dict[str, dict[str, Any]]:
+    return {"default": {}}
+
+
 class ExperimentSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -44,6 +48,11 @@ class ExperimentSpec(BaseModel):
     warmup_ticks: int = Field(300, ge=0)
     window: int = Field(100, ge=1)
     deadlock_ticks: int = Field(20, ge=1)
+    variants: dict[str, dict[str, Any]] = Field(
+        default_factory=_default_variants,
+        min_length=1,
+        description="Named config overrides (deep-merged into base), one more grid axis",
+    )
     task_rate_per_robot: float | None = Field(
         None, gt=0, description="If set, task_rate = this x num_robots (keeps load per robot fixed)"
     )
@@ -75,30 +84,38 @@ class ExperimentSpec(BaseModel):
 
     def runs(self) -> list[RunSpec]:
         out: list[RunSpec] = []
-        for n in self.robots:
-            for seed in self.seed_list:
-                overrides: dict[str, Any] = {"num_robots": n, "seed": seed}
-                if self.task_rate_per_robot is not None:
-                    overrides["task_rate"] = self.task_rate_per_robot * n
-                cfg = self.base.model_copy(update=overrides)
-                SimConfig.model_validate(cfg.model_dump())  # re-validate overrides
-                for planner in self.planners:
-                    for assigner in self.assigners:
-                        out.append(
-                            RunSpec(
-                                experiment=self.name,
-                                planner=planner,
-                                assigner=assigner,
-                                config=cfg.model_dump(),
-                                ticks=self.ticks,
-                                metrics=MetricsConfig(
-                                    warmup_ticks=self.warmup_ticks,
-                                    window=self.window,
-                                    deadlock_ticks=self.deadlock_ticks,
-                                ),
-                            )
-                        )
+        for variant, var_overrides in self.variants.items():
+            for n in self.robots:
+                for seed in self.seed_list:
+                    out.extend(self._runs_for(variant, var_overrides, n, seed))
         return out
+
+    def _runs_for(
+        self, variant: str, var_overrides: dict[str, Any], n: int, seed: int
+    ) -> list[RunSpec]:
+        data = deep_merge(self.base.model_dump(), var_overrides)
+        data |= {"num_robots": n, "seed": seed}
+        if self.task_rate_per_robot is not None:
+            data["task_rate"] = self.task_rate_per_robot * n
+        cfg = SimConfig.model_validate(data).model_dump()
+        metrics = MetricsConfig(
+            warmup_ticks=self.warmup_ticks,
+            window=self.window,
+            deadlock_ticks=self.deadlock_ticks,
+        )
+        return [
+            RunSpec(
+                experiment=self.name,
+                planner=planner,
+                assigner=assigner,
+                config=cfg,
+                ticks=self.ticks,
+                metrics=metrics,
+                variant=variant,
+            )
+            for planner in self.planners
+            for assigner in self.assigners
+        ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +128,7 @@ class RunSpec:
     ticks: int
     metrics: MetricsConfig
     assigner: str = "greedy"
+    variant: str = "default"
 
 
 @dataclass(slots=True)
@@ -124,6 +142,17 @@ class ExperimentResult:
     runs: pd.DataFrame
     timeseries: pd.DataFrame
     out_dir: Path | None
+
+
+def deep_merge(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge ``overrides`` into a copy of ``base``."""
+    out = dict(base)
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
 
 
 def run_single(spec: RunSpec) -> RunResult:
@@ -143,6 +172,7 @@ def run_single(spec: RunSpec) -> RunResult:
         "experiment": spec.experiment,
         "planner": spec.planner,
         "assigner": spec.assigner,
+        "variant": spec.variant,
         "num_robots": cfg.num_robots,
         "seed": cfg.seed,
         "task_rate": cfg.task_rate,
@@ -196,7 +226,7 @@ def run_experiment(
                 if progress:
                     progress(i, len(runs), res)
 
-    order = ["num_robots", "seed", "planner", "assigner"]
+    order = ["variant", "num_robots", "seed", "planner", "assigner"]
     runs_df = pd.DataFrame([r.row for r in results]).sort_values(order, ignore_index=True)
     ts_df = pd.DataFrame([w for r in results for w in r.series])
     if not ts_df.empty:

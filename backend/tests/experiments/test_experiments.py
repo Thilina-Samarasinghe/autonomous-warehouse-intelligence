@@ -152,3 +152,28 @@ def test_assigner_dimension_and_strategy_column() -> None:
     assert cmp.iloc[0]["n_pairs"] == 2
     with pytest.raises(ValidationError, match="unknown assigners"):
         _spec(assigners=["nope"])
+
+
+def test_variants_deep_merge_into_base() -> None:
+    from awi.experiments.runner import deep_merge  # noqa: PLC0415
+
+    spec = _spec(
+        planners=["independent_astar"],
+        robots=[3],
+        seeds=1,
+        variants={
+            "off": {},
+            "on": {"battery": {"enabled": True}, "layout": {"num_chargers": 1}},
+        },
+    )
+    runs = {r.variant: r for r in spec.runs()}
+    assert set(runs) == {"off", "on"}
+    assert runs["off"].config["battery"]["enabled"] is False
+    assert runs["on"].config["battery"]["enabled"] is True
+    assert runs["on"].config["layout"]["num_chargers"] == 1
+    assert runs["on"].config["layout"]["shelf_length"] == SMALL_LAYOUT.shelf_length  # kept
+    assert deep_merge({"a": {"b": 1, "c": 2}}, {"a": {"c": 3}}) == {"a": {"b": 1, "c": 3}}
+    res = run_experiment(spec, None, workers=1)
+    assert strategy_column(res.runs.copy()) == "variant"
+    with pytest.raises(ValidationError):
+        _spec(variants={"bad": {"battery": {"low": 2.0, "enabled": True}}}).runs()

@@ -77,7 +77,38 @@ uv run awi-exp run scenarios/experiments/assignment.yaml --workers 6     # ~5 mi
 
 ---
 
-## 3. Independent-planning baseline (phase 3, re-run with parking)
+## 3. Battery management (phase 6)
+
+```bash
+uv run awi-exp run scenarios/experiments/battery.yaml --workers 6     # ~6 min
+```
+
+**Setup:** prioritized planning + Hungarian assignment, 6,000 ticks (500 warm-up) so every robot goes through several charge cycles, 10 seeds. Energy: 0.1 per move, +0.05 per item carried, 0.01 per tick idle, chargers add 1.0 per tick. Robots start between 50% and 100%. Policy: charge below 25% when free; emergency charge (cargo kept aboard) below 10% or when only just able to reach a charger; charge up to 90%. Variants: battery off, default (4 chargers), 2 chargers, and a conservative policy (charge below 40%, up to 95%).
+
+| Robots | Variant | Throughput / 1k (95% CI) | Completion | Avg delivery | Time charging | Charge sessions | Energy / delivery | Lowest battery | Stranded |
+|---:|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 10 | Battery off | 148.9 [146.7, 151.1] | 99% | 45.8 | — | — | — | — | — |
+| 10 | 4 chargers | 148.9 [146.8, 151.1] | 99% | 49.3 | 8.5% | 66 | 5.6 | 15% | **0** |
+| 10 | 2 chargers | 148.8 [146.8, 150.9] | 99% | 51.1 | 8.6% | 67 | 5.6 | 14% | **0** |
+| 10 | Conservative | 148.9 [146.7, 151.0] | 99% | 50.2 | 8.4% | 76 | 5.6 | 29% | **0** |
+| 20 | Battery off | 289.4 [283.6, 295.1] | 96% | 155.2 | — | — | — | — | — |
+| 20 | 4 chargers | 272.8 [266.1, 279.5] | 90% | 316.8 | 10.4% | 156 | 7.5 | 6% | **0** |
+| 20 | 2 chargers | 223.6 [216.3, 231.0] | 74% | 774.0 | 7.4% | 107 | 6.6 | 8% | **0** |
+| 20 | Conservative | 271.7 [264.7, 278.6] | 90% | 319.7 | 10.2% | 179 | 7.5 | 16% | **0** |
+
+### Findings
+
+1. **No robot ever ran flat.** All 80 runs had 0 stranded robots and 0 conflicts. The fleet-wide lowest battery was 4.5%. Getting there took two policy fixes, which this experiment first exposed (an earlier version stranded up to 7 robots per run at 20 robots):
+   - *Emergency charging with cargo aboard.* Under heavy traffic a delivery leg can take far longer than its shortest path (one leg took 192 ticks for about 15 cells), so the up-front energy estimate is not enough. A robot that becomes critical mid-delivery now charges first and resumes afterwards.
+   - *Charger preemption.* An emergency robot may take the charger of a robot already charged above 25%.
+2. **With spare capacity, energy management is free.** At 10 robots, throughput is unchanged (p = 0.94). Deliveries are only 3.5 ticks slower, from charging stops.
+3. **Under load, chargers become the bottleneck.** At 20 robots, 4 chargers cost 5.7% throughput compared with infinite energy (p = 0.002). Halving to 2 chargers costs a further **18%** (p = 0.002, d = −1.0) and more than doubles delivery time, because robots queue for charging. The charger count must scale with fleet size; about 1 charger per 5 robots is enough here.
+4. **A conservative threshold buys safety for free.** Charging below 40% instead of 25% raises the lowest battery seen from 6% to 16%, with no measurable throughput cost (p = 0.63). Robots charge more often (179 vs 156 sessions), but each session is shorter.
+5. **Energy per delivery grows with congestion**: 5.6 at 10 robots vs 7.5 at 20. That's the energy cost of detours and of moving aside in a busier warehouse.
+
+---
+
+## 4. Independent-planning baseline (phase 3, re-run with parking)
 
 ```bash
 uv run awi-exp run scenarios/experiments/baseline_sweep.yaml --workers 6

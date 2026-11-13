@@ -1,0 +1,21 @@
+# The cost of energy management: battery off vs on, charger count and policy.
+# Coordinated planning (prioritized) + Hungarian assignment; long runs so every
+# robot goes through several charge cycles.
+name: battery
+description: Battery off vs default policy vs 2 chargers vs conservative thresholds.
+planners: [prioritized]
+assigners: [hungarian]
+robots: [10, 20]
+seeds: 10
+ticks: 6000
+warmup_ticks: 500
+task_rate_per_robot: 0.015
+variants:
+  no_battery: {}
+  battery_4_chargers:
+    battery: {enabled: true}
+  battery_2_chargers:
+    battery: {enabled: true}
+    layout: {num_chargers: 2}
+  battery_conservative:
+    battery: {enabled: true, low: 0.4, resume: 0.95}

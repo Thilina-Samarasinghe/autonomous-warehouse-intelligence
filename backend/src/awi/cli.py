@@ -42,6 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="task assigner (default: greedy)",
     )
     p.add_argument("--capacity", type=int, help="items per robot trip (batching)")
+    p.add_argument("--battery", action="store_true", help="enable battery management")
     p.add_argument(
         "--render-every", type=int, default=0, metavar="N", help="print the map every N ticks"
     )
@@ -61,7 +62,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         }.items()
         if v is not None
     }
-    cfg = SimConfig.model_validate(cfg.model_dump() | overrides)
+    data = cfg.model_dump() | overrides
+    if args.battery:
+        data["battery"] = {**data["battery"], "enabled": True}
+    cfg = SimConfig.model_validate(data)
 
     planner: PathPlanner
     if args.planner == "bfs":
@@ -81,6 +85,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     elapsed = time.perf_counter() - start
 
     s = sim.summary()
+    robots = sim.world.robots.values()
     avg = f"{s.avg_delivery_time:.1f}" if s.avg_delivery_time is not None else "n/a"
     print(
         f"planner={args.planner} assigner={args.assigner} "
@@ -95,6 +100,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"avg delivery time={avg} ticks  distance={s.total_distance}  "
         f"waits={s.total_wait_ticks}  blocked={s.total_blocked_ticks}  idle={s.total_idle_ticks}"
     )
+    if sim.world.battery is not None:
+        cap = sim.world.battery.capacity
+        charging = sum(r.charging_ticks for r in robots) / max(1, s.ticks * len(robots))
+        print(
+            f"battery: sessions={sum(r.charge_sessions for r in robots)} "
+            f"charging={100 * charging:.1f}% "
+            f"lowest_now={100 * min(r.battery for r in robots) / cap:.0f}% "
+            f"stranded={sum(r.state.value == 'stranded' for r in robots)}"
+        )
     return 0
 
 
