@@ -18,7 +18,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+report = [
+    "matplotlib>=3.8",
+]
 analysis = [
+    "matplotlib>=3.8",
     "duckdb>=1.0",
     "plotly>=5.22",
     "jupyterlab>=4.2",
@@ -70,7 +74,7 @@ mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["networkx.*", "scipy.*", "ortools.*", "pandas.*", "pyarrow.*"]
+module = ["networkx.*", "scipy.*", "ortools.*", "pandas.*", "pyarrow.*", "matplotlib.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- pytest

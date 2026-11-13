@@ -79,6 +79,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_run.add_argument("--seeds", type=int, help="override the number of seeds")
     p_run.add_argument("--ticks", type=int, help="override ticks per run")
 
+    p_fig = sub.add_parser(
+        "figures", help="render report figures from results (needs the 'report' extra)"
+    )
+    p_fig.add_argument("--results", type=Path, default=Path("results"))
+    p_fig.add_argument("--out", type=Path, default=Path("../docs/figures"))
+
+    p_ver = sub.add_parser("verify", help="re-run sampled rows and check they reproduce exactly")
+    p_ver.add_argument("results", type=Path)
+    p_ver.add_argument("--sample", type=int, default=5)
+
     p_rep = sub.add_parser("report", help="summarize a results directory")
     p_rep.add_argument("results", type=Path)
     for p in (p_run, p_rep):
@@ -86,6 +96,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         p.add_argument("--b", help="strategy B for the paired comparison")
 
     args = parser.parse_args(argv)
+    if args.cmd == "figures":
+        try:
+            from awi.experiments.figures import make_figures  # noqa: PLC0415
+        except ImportError:  # pragma: no cover - optional dependency
+            print("matplotlib missing: run `uv sync --extra report`", file=sys.stderr)
+            return 1
+        for path in make_figures(args.results, args.out):
+            print(f"wrote {path}")
+        return 0
+    if args.cmd == "verify":
+        from awi.experiments.verify import verify_results  # noqa: PLC0415
+
+        rep = verify_results(args.results, sample=args.sample)
+        status = "REPRODUCED" if rep.ok else "MISMATCH"
+        print(f"{status}: {rep.checked} runs re-run, {len(rep.mismatches)} differing values")
+        for m in rep.mismatches[:20]:
+            print(f"  row {m['row']} {m['column']}: recorded={m['recorded']} now={m['now']}")
+        return 0 if rep.ok else 1
     if args.cmd == "run":
         spec = ExperimentSpec.from_yaml(args.spec)
         overrides = {k: v for k, v in (("seeds", args.seeds), ("ticks", args.ticks)) if v}

@@ -25,7 +25,9 @@ The project answers it with a reproducible experiment pipeline: identical order 
 | Throughput (deliveries / 1k ticks) | 61.7 | **358.6** | **5.8×** |
 | Runs ending in total gridlock | 7 / 10 | **0 / 10** | |
 
-All differences: Wilcoxon signed-rank p = 0.002, Cliff's |d| ≈ 1.0. The full analysis is in **[docs/RESULTS.md](docs/RESULTS.md)**.
+All differences: Wilcoxon signed-rank p = 0.002, Cliff's |d| ≈ 1.0.
+
+📄 **[Final report](docs/REPORT.md)**: research questions, methods, figures, discussion and threats to validity · 📊 **[Full results tables](docs/RESULTS.md)** · 🎬 **[Demo guide](docs/DEMO.md)**
 
 ---
 
@@ -225,7 +227,7 @@ Full tables, confidence intervals and discussion: **[docs/RESULTS.md](docs/RESUL
 3. **CBS beats PP only at small fleet sizes.** At 10 robots CBS delivers 26% faster than PP (p = 0.002). At 20–30 robots its node budget runs out in over 90% of replans and the two are indistinguishable. PP gives about 99% of the benefit for 10–15× less CPU.
 4. **Order batching beats optimal one-to-one assignment.** With 2 items per trip, throughput is **+54%** and delivery time **−78%** at 20 robots. Hungarian beats greedy by about 5%, and CP-SAT matches Hungarian exactly.
 5. **Energy management is safe and cheap.** 0 stranded robots in 80 long runs. It costs nothing at 10 robots and 5.7% at 20 robots, but halving the number of chargers costs a further 18%, so charger count must scale with fleet size.
-6. **Coordinated fleets stay productive around people and blocked aisles.** 0 gridlocks in 100 obstacle runs, against 18 for independent planning. At 20 robots with 12 people, the coordinated fleet delivers **3.8× more** (p = 0.002). Blockages cost it under 1%. This depends on a robot keep-out zone around people, and on moving robots *out* of a zone when a person walks up to them. Without these, robots box people in and wait forever (see [Results §4](docs/RESULTS.md)).
+6. **Coordinated fleets stay productive around people and blocked aisles.** 0 gridlocks in 80 runs with people or blockages, against 15 for independent planning. At 20 robots with 12 people, the coordinated fleet delivers **3.8× more** (p = 0.002). Blockages cost it under 1%. This depends on a robot keep-out zone around people, and on moving robots *out* of a zone when a person walks up to them. Without these, robots box people in and wait forever (see [Results §4](docs/RESULTS.md)).
 7. **Where products sit matters as much as how robots drive.** Travel-optimal slotting raises independent-fleet throughput by up to **2.5×** and makes coordinated deliveries 60–80% faster. A GA that also spreads demand over aisles scores well on its proxy but *loses* in simulation. Congestion came from long trips into the racks, not from bunched demand, and simulation-based validation exposed the wrong assumption.
 
 ---
@@ -321,6 +323,14 @@ variants:                     # named config overrides, deep-merged into `base`
   blockages:  {dynamics: {enabled: true, blockage_rate: 0.01}}
 base:                         # any SimConfig field
   zipf_s: 1.0
+```
+
+Then render the report figures and check that recorded results still reproduce *exactly* with the current code:
+
+```bash
+uv sync --extra report                                   # matplotlib, for figures
+uv run awi-exp figures --results results --out ../docs/figures
+uv run awi-exp verify results/comparison --sample 5      # re-runs 5 recorded runs, compares every metric
 ```
 
 Results land in `backend/results/<name>/`: `runs.parquet` (one row of KPIs per run), `timeseries.parquet` (100-tick windows) and `spec.yaml`. `awi-exp report` prints mean tables and paired comparisons: Wilcoxon signed-rank, Mann–Whitney U and Cliff's delta.

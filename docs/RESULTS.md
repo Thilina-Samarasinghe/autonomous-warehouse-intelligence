@@ -147,7 +147,7 @@ uv run awi-exp run scenarios/experiments/dynamics.yaml --workers 6     # ~8 min,
 
 ### Findings
 
-1. **A coordinated fleet never gridlocked, in 100 of 100 obstacle runs.** Independent A* gridlocked in 18 of 100.
+1. **A coordinated fleet never gridlocked** in any of its 80 runs with people or blockages (0 of 100 including the obstacle-free runs). Independent A* gridlocked in 15 of 80 (18 of 100).
 2. **Coordinated planning beats independent planning in every obstacle scenario.** At 20 robots, prioritized planning delivers **+152% (6 people), +284% (12 people) and +75% (blockages)** compared with independent A*, with 53 to 71% lower delivery times (all p = 0.002, Cliff's d ≥ 0.95).
 3. **Blockages are nearly free for a coordinated fleet** (−0.2% to −0.7%, not significant). The whole fleet replans around a closed aisle within one commit window. Independent robots lose 6 to 7% and still gridlock.
 4. **People are the harder disturbance**, because they move unpredictably and the planner only knows where they are now. Coordinated throughput drops by 2% (10 robots, 12 people) to 14% (20 robots, 12 people), and delivery times roughly double. Independent fleets lose up to 63%.
@@ -196,7 +196,7 @@ Proxy scores (λ = 0.5): random travel 18.2 / concentration 2.00; closest 11.5 /
 1. **Slotting is one of the biggest levers in the whole system.** Moving from random to closest slotting raises throughput by **+71% (20 robots) and +145% (30 robots)** for independent fleets and removes most of their gridlocks. For coordinated fleets it adds +4% / +18% throughput and makes deliveries **60–80% faster** (all p ≤ 0.004). A 30-robot coordinated fleet with closest slotting delivers 440.9 per 1k ticks, the best result in this report.
 2. **Spreading demand over aisles does *not* help: the congestion hypothesis is falsified.** The GA's congestion penalty never beats travel-optimal slotting in simulation. At λ = 0.5 it is significantly worse (coordinated, 30 robots: −2.1% throughput and +78% delivery time, p = 0.002). With λ = 0.05 it is statistically indistinguishable from closest.
 3. **Why:** the gridlocks of earlier experiments were not caused by hot products being *bunched*. They were caused by robots driving *deep into* the rack area to randomly placed hot shelves, through narrow pick aisles crossed by everyone else. Closest slotting keeps the busiest traffic in the open top zone next to the stations. The coordinated planner handles the remaining local congestion easily.
-4. **Lesson for optimisation work:** the GA optimised its proxy very well (−22% fitness against random). It is the proxy that encoded a wrong belief about what causes congestion. Validating candidates by simulation, which the dashboard's Optimise view does too, is what exposed this. A natural next step would be to evolve slotting with a simulation-based fitness, or to let the GA optimise station positions as well, an objective that greedy slotting cannot solve.
+4. **Lesson for optimisation work:** the GA optimised its proxy very well (−34% fitness against random). It is the proxy that encoded a wrong belief about what causes congestion. Validating candidates by simulation, which the dashboard's Optimise view does too, is what exposed this. A natural next step would be to evolve slotting with a simulation-based fitness, or to let the GA optimise station positions as well, an objective that greedy slotting cannot solve.
 
 ---
 
