@@ -11,14 +11,14 @@ dependencies = [
     "ortools>=9.10",
     "pydantic>=2.7",
     "pyyaml>=6.0",
+    "pandas>=2.2",
+    "pyarrow>=16.0",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
 ]
 
 [project.optional-dependencies]
 analysis = [
-    "pandas>=2.2",
-    "pyarrow>=16.0",
     "duckdb>=1.0",
     "plotly>=5.22",
     "jupyterlab>=4.2",
@@ -39,6 +39,7 @@ dev = [
 [project.scripts]
 awi-api = "awi.api.main:run"
 awi-sim = "awi.cli:main"
+awi-exp = "awi.experiments.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.24"]
@@ -69,7 +70,7 @@ mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["networkx.*", "scipy.*", "ortools.*"]
+module = ["networkx.*", "scipy.*", "ortools.*", "pandas.*", "pyarrow.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------- pytest

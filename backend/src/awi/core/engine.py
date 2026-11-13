@@ -20,6 +20,7 @@ Event timestamps use the index ``t`` of the tick in which they happened.
 
 from __future__ import annotations
 
+import time
 from collections import defaultdict, deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -27,6 +28,7 @@ from dataclasses import dataclass, field
 from awi.assignment.base import TaskAssigner
 from awi.assignment.greedy import GreedyNearestAssigner
 from awi.core.config import SimConfig
+from awi.core.conflicts import count_conflicts, wait_for_graph
 from awi.core.grid import CellType
 from awi.core.layout import Layout, generate_layout
 from awi.core.orders import TaskGenerator
@@ -54,6 +56,12 @@ class TickReport:
     moved: int = 0
     blocked: list[RobotId] = field(default_factory=list)
     replanned: list[RobotId] = field(default_factory=list)
+    vertex_conflicts: int = 0
+    edge_conflicts: int = 0
+    waits_for: dict[RobotId, RobotId] = field(default_factory=dict)
+    """Wait-for graph: blocked robot -> robot holding the cell it wanted."""
+    plan_calls: int = 0
+    plan_seconds: float = 0.0
 
 
 @dataclass(slots=True)
@@ -178,7 +186,10 @@ class Simulation:
         if not requests:
             return
 
+        t0 = time.perf_counter()
         paths = self.planner.plan(self.world, requests)
+        report.plan_seconds += time.perf_counter() - t0
+        report.plan_calls += 1
         requested = {req.robot_id for req in requests}
         for rid, path in sorted(paths.items()):
             robot = self.world.robots.get(rid)
@@ -200,7 +211,9 @@ class Simulation:
         intent = {
             r.id: (r.path[0] if r.state in MOVING_STATES and r.path else r.pos) for r in robots
         }
+        report.vertex_conflicts, report.edge_conflicts = count_conflicts(current, intent)
         final, blocked = resolve_moves(current, intent)
+        report.waits_for = wait_for_graph(current, intent, final, blocked)
 
         for r in robots:
             nxt = final[r.id]

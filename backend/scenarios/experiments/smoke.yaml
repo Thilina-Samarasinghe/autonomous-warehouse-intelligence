@@ -1,0 +1,15 @@
+# Tiny experiment for CI and quick checks.
+name: smoke
+planners: [independent_astar, independent_bfs]
+robots: [4]
+seeds: 3
+ticks: 300
+warmup_ticks: 50
+base:
+  task_rate: 0.08
+  layout:
+    shelf_block_rows: 2
+    shelf_segments: 2
+    shelf_length: 4
+    num_drop_stations: 2
+    num_chargers: 2

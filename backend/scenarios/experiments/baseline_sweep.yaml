@@ -1,0 +1,13 @@
+# Independent planning baselines across fleet sizes (load per robot held fixed).
+name: baseline_sweep
+description: Independent A* vs BFS, 10/20/30 robots, same seeds per planner.
+planners: [independent_astar, independent_bfs]
+robots: [10, 20, 30]
+seeds: 10
+ticks: 3000
+warmup_ticks: 300
+task_rate_per_robot: 0.015
+base:
+  zipf_s: 1.0
+  pick_ticks: 2
+  drop_ticks: 1

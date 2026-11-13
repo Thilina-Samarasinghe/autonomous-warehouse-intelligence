@@ -53,6 +53,17 @@ uv run awi-sim --robots 4 --ticks 100 --render-every 25      # ASCII map frames
 uv run awi-sim --config scenarios/stress_30.yaml --ticks 3000
 ```
 
+Run batch experiments (parallel; results land in `backend/results/<name>/*.parquet`):
+
+```bash
+cd backend
+uv run awi-exp run scenarios/experiments/smoke.yaml                  # seconds
+uv run awi-exp run scenarios/experiments/baseline_sweep.yaml --workers 6
+uv run awi-exp report results/baseline_sweep                         # tables + paired stats
+```
+
+See [`docs/RESULTS.md`](docs/RESULTS.md) for findings so far.
+
 Optional analysis tools (pandas, DuckDB, Plotly, JupyterLab):
 
 ```bash
@@ -83,7 +94,7 @@ CI (GitHub Actions) runs the same checks on every push and pull request.
 - [x] Phase 0: project setup, tooling, CI
 - [x] Phase 1: core simulation engine
 - [x] Phase 2: Dijkstra + A\* (independent planning)
-- [ ] Phase 3: metrics + headless experiment runner
+- [x] Phase 3: metrics + headless experiment runner
 - [ ] Phase 4: Space-Time A\*, Prioritized Planning, CBS
 - [ ] Phase 5: task assignment (Hungarian, CP-SAT, VRP batching)
 - [ ] Phase 6: battery management
