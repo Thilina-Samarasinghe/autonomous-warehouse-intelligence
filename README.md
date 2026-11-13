@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Thilina-Samarasinghe/autonomous-warehouse-intelligence/actions/workflows/ci.yml/badge.svg?branch=development)](https://github.com/Thilina-Samarasinghe/autonomous-warehouse-intelligence/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
-![Tests](https://img.shields.io/badge/tests-175%2B%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-180%2B%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)
 ![Typed](https://img.shields.io/badge/mypy-strict-blue)
 
@@ -37,15 +37,16 @@ All differences: Wilcoxon signed-rank p = 0.002, Cliff's |d| ≈ 1.0. The full a
 4. [Algorithms](#algorithms)
 5. [Metrics](#metrics)
 6. [Results](#results)
-7. [Getting started](#getting-started)
-8. [Command-line tools](#command-line-tools)
-9. [Running experiments](#running-experiments)
-10. [HTTP and WebSocket API](#http-and-websocket-api)
-11. [Project structure](#project-structure)
-12. [Quality and testing](#quality-and-testing)
-13. [Design decisions](#design-decisions)
-14. [Limitations and roadmap](#limitations-and-roadmap)
-15. [References](#references)
+7. [Live dashboard](#live-dashboard)
+8. [Getting started](#getting-started)
+9. [Command-line tools](#command-line-tools)
+10. [Running experiments](#running-experiments)
+11. [HTTP and WebSocket API](#http-and-websocket-api)
+12. [Project structure](#project-structure)
+13. [Quality and testing](#quality-and-testing)
+14. [Design decisions](#design-decisions)
+15. [Limitations and roadmap](#limitations-and-roadmap)
+16. [References](#references)
 
 ---
 
@@ -61,7 +62,8 @@ All differences: Wilcoxon signed-rank p = 0.002, Cliff's |d| ≈ 1.0. The full a
 | **Dynamic obstacles** | People / forklifts walking the aisles with a robot keep-out safety zone, random temporary aisle blockages (connectivity-preserving), obstacles injected by hand via the API |
 | **Metrics** | Delivery-time percentiles, throughput, would-be collisions, wait-for-graph deadlock detection, distance, idle/wait/blocked time, planner CPU time, energy KPIs, obstacle KPIs, windowed time series |
 | **Experiments** | YAML specs over a planner × assigner × variant × fleet size × seed grid, parallel execution, Parquet output, paired statistics (95% CI, Wilcoxon, Mann–Whitney U, Cliff's delta) |
-| **Service** | FastAPI REST API and WebSocket streaming of live frames (robots with planned paths, people, blockages, KPIs) for the dashboard |
+| **Service** | FastAPI REST API and WebSocket streaming of live frames (robots with planned paths, people, blockages, KPIs) |
+| **Dashboard** | React + TypeScript + Canvas live map, run controls, click-to-block aisles, KPI tiles, Plotly charts, and a side-by-side comparison of two strategies stepped in lockstep; light and dark themes |
 
 ---
 
@@ -219,6 +221,27 @@ Full tables, confidence intervals and discussion: **[docs/RESULTS.md](docs/RESUL
 
 ---
 
+## Live dashboard
+
+![Live view: prioritized planning with people in the aisles and battery management](docs/images/dashboard-live.png)
+
+**Live view.** Pick a planner, an assigner and a scenario (fleet size, seed, order rate, items per trip, people, blockages, battery), then run, pause or step the simulation at 2–200 ticks/s.
+
+- **The map** (HTML canvas, robots glide between ticks) shows each robot coloured by what it's doing, with its **planned path** ahead and a fading trail behind. A white square means cargo aboard, and an arc around the robot shows battery level.
+- **Obstacles:** people appear with their safety zone, and blocked aisles are hatched. Tick *Click map to block an aisle* to close a cell yourself and watch the fleet replan.
+- **Hover** any robot or cell for details.
+- **KPI tiles and Plotly charts** (deliveries, backlog, fleet activity, battery levels) update live. A fleet table lists every robot as text.
+
+![Compare view: independent A* vs prioritized planning on the same seed](docs/images/dashboard-compare.png)
+
+**Compare view.** Two strategies run on **the same seed**: the same warehouse, orders, people and blockages. The browser steps both in **lockstep**, so they always show the same tick. A head-to-head table shows the relative difference for every KPI (improvements in green, regressions in red), and the charts overlay deliveries and would-be collisions. Above, after 573 ticks, both fleets have delivered 72 orders. Independent A* needed 290 engine interventions to avoid collisions; prioritized planning needed none, and delivered 18% faster.
+
+Colours follow a validated palette: three categorical hues tested for colour-vision deficiency in both modes, plus a neutral gray. State is never shown by colour alone; legends, tooltips and the fleet table carry it as text. Dark mode has its own validated colour steps:
+
+<p align="center"><img src="docs/images/dashboard-dark.png" alt="Dashboard in dark mode" width="720"></p>
+
+---
+
 ## Getting started
 
 **Requirements:** Python 3.12, [uv](https://docs.astral.sh/uv/) (`pip install uv`), and Node.js 20.19+ (for the dashboard only).
@@ -227,7 +250,7 @@ Full tables, confidence intervals and discussion: **[docs/RESULTS.md](docs/RESUL
 git clone https://github.com/Thilina-Samarasinghe/autonomous-warehouse-intelligence.git
 cd autonomous-warehouse-intelligence/backend
 uv sync                                     # creates .venv and installs locked dependencies
-uv run pytest                               # optional: run the 175+ tests
+uv run pytest                               # optional: run the 180+ tests
 uv run awi-sim --robots 10 --ticks 1000     # first simulation
 ```
 
@@ -350,7 +373,11 @@ backend/
     api/           FastAPI app, sessions, REST + WebSocket routes, schemas
   tests/           unit, property-based (Hypothesis) and integration tests
   scenarios/       YAML scenarios and experiment specs
-frontend/          React + TypeScript + Vite dashboard
+frontend/
+  src/api/         typed REST client and WebSocket hook (frame batching, lockstep requests)
+  src/components/  warehouse canvas, Plotly wrapper, charts, KPI tiles, legends, forms, tables
+  src/views/       Live and Compare views
+  src/lib/         state groups, chart history buffer, scenario mapping, theme hook
 docs/              implementation plan, results
 ```
 
@@ -358,7 +385,7 @@ docs/              implementation plan, results
 
 ## Quality and testing
 
-- **175+ tests, 97% coverage**, including property-based tests (Hypothesis) of the key invariants:
+- **180+ tests, 97% coverage**, including property-based tests (Hypothesis) of the key invariants:
   - robots never share a cell or swap places, under thousands of random scenarios;
   - A\* path length equals BFS on random maps;
   - Prioritized Planning and CBS solutions are conflict-free on random instances, and an optimally solved CBS plan never costs more than PP's;
@@ -367,12 +394,15 @@ docs/              implementation plan, results
   - robots never enter people, safety zones or blockages.
 - Exact-value tests for delivery timing, warm-up handling and energy drain.
 - `mypy --strict`, `ruff` lint and format, and pre-commit hooks; GitHub Actions CI on every push.
+- Frontend: strict TypeScript, `oxlint`, Vitest unit tests, and a headless-browser check of both views in light, dark and phone layouts (no console errors, no horizontal overflow).
 - Full determinism: same seed, same results, which is itself tested.
 
 ```bash
 cd backend
 uv run pytest --cov            # tests + coverage
 uv run ruff check . && uv run ruff format --check . && uv run mypy
+cd ../frontend
+npm test && npm run lint && npm run build
 ```
 
 ---
@@ -400,7 +430,7 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy
 | 6 · Battery management | ✅ |
 | 7 · Dynamic obstacles | ✅ |
 | 8 · FastAPI REST + WebSocket streaming | ✅ |
-| 9 · Live dashboard (React + Canvas + Plotly) | ⏳ |
+| 9 · Live dashboard (React + Canvas + Plotly) | ✅ |
 | 10 · Genetic algorithm for layout / SKU slotting | ⏳ |
 | 11–12 · Final report, Docker, demo | ⏳ |
 

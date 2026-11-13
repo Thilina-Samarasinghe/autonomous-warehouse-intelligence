@@ -1,42 +1,76 @@
 import { useEffect, useState } from 'react'
-import { fetchHealth, type HealthResponse } from './api/client'
+import { api } from './api/client'
+import type { Options } from './api/types'
+import { CompareView } from './views/CompareView'
+import { LiveView } from './views/LiveView'
 
-type State =
-  | { kind: 'loading' }
-  | { kind: 'ok'; health: HealthResponse }
-  | { kind: 'error'; message: string }
+type Tab = 'live' | 'compare'
+type Backend = { kind: 'loading' } | { kind: 'ok'; version: string; options: Options } | { kind: 'error'; message: string }
+
+const TAB_KEY = 'awi.tab'
+
+function savedTab(): Tab {
+  try {
+    return localStorage.getItem(TAB_KEY) === 'compare' ? 'compare' : 'live'
+  } catch {
+    return 'live'
+  }
+}
 
 export default function App() {
-  const [state, setState] = useState<State>({ kind: 'loading' })
+  const [tab, setTab] = useState<Tab>(savedTab)
+  const [backend, setBackend] = useState<Backend>({ kind: 'loading' })
 
   useEffect(() => {
     const ctrl = new AbortController()
-    fetchHealth(ctrl.signal)
-      .then((health) => setState({ kind: 'ok', health }))
+    Promise.all([api.health(ctrl.signal), api.options()])
+      .then(([health, options]) => setBackend({ kind: 'ok', version: health.version, options }))
       .catch((err: unknown) => {
-        if (!ctrl.signal.aborted) setState({ kind: 'error', message: String(err) })
+        if (!ctrl.signal.aborted) setBackend({ kind: 'error', message: String(err) })
       })
     return () => ctrl.abort()
   }, [])
 
+  const choose = (t: Tab) => {
+    setTab(t)
+    try {
+      localStorage.setItem(TAB_KEY, t)
+    } catch {
+      /* storage unavailable: the choice just isn't remembered */
+    }
+  }
+
   return (
-    <main className="shell">
-      <h1>Warehouse Fleet Simulator</h1>
-      <p className="subtitle">Multi-robot coordination: A*, CBS, Hungarian, OR-Tools, GA</p>
-      <section className="card">
-        <h2>Backend</h2>
-        {state.kind === 'loading' && <p>Connecting…</p>}
-        {state.kind === 'ok' && (
-          <p className="ok">
-            ● Online · API v{state.health.version}
+    <div className="app">
+      <header className="header">
+        <div className="brand">
+          <h1>Warehouse Fleet Simulator</h1>
+          <span className="sub">Multi-robot coordination · A* · CBS · Hungarian · OR-Tools</span>
+        </div>
+        <nav className="tabs" aria-label="Views">
+          <button className={tab === 'live' ? 'tab active' : 'tab'} onClick={() => choose('live')}>
+            Live
+          </button>
+          <button className={tab === 'compare' ? 'tab active' : 'tab'} onClick={() => choose('compare')}>
+            Compare
+          </button>
+        </nav>
+        <div className="backend">
+          {backend.kind === 'ok' && <span className="ok">● API v{backend.version}</span>}
+          {backend.kind === 'loading' && <span className="sub">Connecting…</span>}
+          {backend.kind === 'error' && <span className="err">● Backend offline</span>}
+        </div>
+      </header>
+
+      {backend.kind === 'error' && (
+        <section className="panel empty">
+          <h2>Backend offline</h2>
+          <p>
+            Start it with <code>uv run awi-api</code> in <code>backend/</code>, then reload this page.
           </p>
-        )}
-        {state.kind === 'error' && (
-          <p className="err">
-            ● Offline. Start it with <code>uv run awi-api</code> in <code>backend/</code>
-          </p>
-        )}
-      </section>
-    </main>
+        </section>
+      )}
+      {backend.kind === 'ok' && (tab === 'live' ? <LiveView options={backend.options} /> : <CompareView options={backend.options} />)}
+    </div>
   )
 }

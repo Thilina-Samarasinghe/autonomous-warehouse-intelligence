@@ -71,11 +71,25 @@ def test_validation_errors(client: TestClient) -> None:
     assert client.get("/api/sessions/missing/frame").status_code == 404
 
 
-def test_session_limit(client: TestClient) -> None:
-    for _ in range(3):
-        _create(client)
+def test_session_limit_evicts_least_recently_used_idle_session(client: TestClient) -> None:
+    first = _create(client)["id"]
+    second = _create(client)["id"]
+    third = _create(client)["id"]
+    client.post(f"/api/sessions/{first}/step", json={"ticks": 1})  # first is now the freshest
+    fourth = _create(client)["id"]  # at capacity: evicts the least recently used idle one
+    ids = {s["id"] for s in client.get("/api/sessions").json()}
+    assert ids == {first, third, fourth}
+    assert second not in ids
+
+
+def test_session_limit_keeps_watched_and_running_sessions(client: TestClient) -> None:
+    sessions = [_create(client)["id"] for _ in range(3)]
+    for sid in sessions:
+        client.post(f"/api/sessions/{sid}/control", json={"action": "start", "speed": 50})
     resp = client.post("/api/sessions", json={"config": SMALL})
     assert resp.status_code == 422 and "at most 3" in resp.text
+    for sid in sessions:
+        client.post(f"/api/sessions/{sid}/control", json={"action": "pause"})
 
 
 def test_obstacle_injection(client: TestClient) -> None:

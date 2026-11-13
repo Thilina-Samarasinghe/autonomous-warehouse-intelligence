@@ -15,6 +15,7 @@ import asyncio
 import contextlib
 import math
 import threading
+import time
 import uuid
 from typing import Any
 
@@ -83,6 +84,7 @@ class Session:
         self.assigner_name = assigner
         self.speed = speed
         self.running = False
+        self.last_active = time.monotonic()
         self._lock = threading.Lock()
         self._task: asyncio.Task[None] | None = None
         self._subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
@@ -98,7 +100,15 @@ class Session:
         self.metrics = MetricsCollector(self.sim)
 
     # ------------------------------------------------------------ simulation
+    @property
+    def watched(self) -> bool:
+        return bool(self._subscribers)
+
+    def touch(self) -> None:
+        self.last_active = time.monotonic()
+
     def step(self, ticks: int = 1) -> None:
+        self.touch()
         with self._lock:
             for _ in range(ticks):
                 self.metrics.observe(self.sim.step())
@@ -188,10 +198,12 @@ class Session:
     def subscribe(self) -> asyncio.Queue[dict[str, Any]]:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=2)
         self._subscribers.add(queue)
+        self.touch()
         return queue
 
     def unsubscribe(self, queue: asyncio.Queue[dict[str, Any]]) -> None:
         self._subscribers.discard(queue)
+        self.touch()
 
     def publish(self, message: dict[str, Any]) -> None:
         for queue in list(self._subscribers):
@@ -234,8 +246,15 @@ class SessionManager:
         self._sessions: dict[str, Session] = {}
 
     def create(self, **kwargs: Any) -> Session:
+        """Create a session. At capacity, the least recently used session that
+        nobody is watching and that isn't running is evicted (browsers often
+        close without deleting their sessions)."""
         if len(self._sessions) >= self.max_sessions:
-            raise SessionError(f"at most {self.max_sessions} sessions; delete one first")
+            idle = [s for s in self._sessions.values() if not s.watched and not s.running]
+            if not idle:
+                raise SessionError(f"at most {self.max_sessions} active sessions; delete one first")
+            victim = min(idle, key=lambda s: s.last_active)
+            del self._sessions[victim.id]
         session = Session(**kwargs)
         self._sessions[session.id] = session
         return session
