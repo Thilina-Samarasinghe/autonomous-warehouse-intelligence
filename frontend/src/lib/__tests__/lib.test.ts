@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Frame, RobotStateName } from '../../api/types'
 import { History } from '../history'
 import { STATE_GROUPS, groupOf } from '../robotStates'
-import { DEFAULT_SCENARIO, toConfig } from '../scenario'
+import { DEFAULT_SCENARIO, DEMO_PRESETS, toConfig } from '../scenario'
 
 function frame(t: number, states: RobotStateName[], delivered = 0): Frame {
   return {
@@ -75,5 +75,17 @@ describe('scenario -> SimConfig', () => {
     expect(cfg.battery).toEqual({ enabled: true })
     expect(cfg.dynamics).toEqual({ enabled: true, humans: 3, blockage_rate: 0 })
     expect((toConfig(DEFAULT_SCENARIO).dynamics as { enabled: boolean }).enabled).toBe(false)
+  })
+})
+
+describe('demo presets', () => {
+  it('have unique ids, a story and two strategies each', () => {
+    const ids = DEMO_PRESETS.map((p) => p.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const p of DEMO_PRESETS) {
+      expect(p.story.length).toBeGreaterThan(10)
+      expect(p.sides).toHaveLength(2)
+      expect(toConfig(p.scenario).num_robots).toBe(p.scenario.robots)
+    }
   })
 })

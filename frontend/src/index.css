@@ -254,6 +254,10 @@ button.primary {
   border-color: var(--accent);
   color: var(--accent-ink);
 }
+.story {
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+}
 .side-block {
   display: grid;
   gap: 8px;

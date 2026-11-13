@@ -7,7 +7,7 @@ import { MapLegend } from '../components/MapLegend'
 import { ChartLegend } from '../components/ChartLegend'
 import { PlotlyChart } from '../components/PlotlyChart'
 import { ScenarioForm, StrategySelect } from '../components/ScenarioForm'
-import { DEFAULT_SCENARIO, PRETTY, toConfig, type Scenario } from '../lib/scenario'
+import { DEFAULT_SCENARIO, DEMO_PRESETS, PRETTY, toConfig, type Scenario } from '../lib/scenario'
 import { WarehouseCanvas } from '../components/WarehouseCanvas'
 import { cssVar } from '../lib/robotStates'
 import { useThemeVersion } from '../lib/useTheme'
@@ -43,6 +43,7 @@ function value(f: Frame | null, key: keyof Kpis | 'delivered'): number | null {
  */
 export function CompareView({ options }: { options: Options }) {
   const [scenario, setScenario] = useState<Scenario>(DEFAULT_SCENARIO)
+  const [preset, setPreset] = useState('')
   const [sides, setSides] = useState<[Side, Side]>([
     { planner: 'independent_astar', assigner: 'hungarian' },
     { planner: 'prioritized', assigner: 'hungarian' },
@@ -149,6 +150,28 @@ export function CompareView({ options }: { options: Options }) {
       <aside className="sidebar panel">
         <h2>Comparison</h2>
         <p className="sub">Two strategies, the same warehouse, the same orders, in lockstep.</p>
+        <label>
+          Demo scenario
+          <select
+            value={preset}
+            onChange={(e) => {
+              const p = DEMO_PRESETS.find((d) => d.id === e.target.value)
+              setPreset(e.target.value)
+              if (p) {
+                setScenario(p.scenario)
+                setSides([{ ...p.sides[0] }, { ...p.sides[1] }])
+              }
+            }}
+          >
+            <option value="">Custom</option>
+            {DEMO_PRESETS.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {preset && <p className="sub story">{DEMO_PRESETS.find((d) => d.id === preset)?.story}</p>}
         {(['A', 'B'] as const).map((label, i) => (
           <div className="side-block" key={label}>
             <h3>

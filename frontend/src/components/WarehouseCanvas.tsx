@@ -135,9 +135,13 @@ export function WarehouseCanvas({ layout, frame, onCellClick, maxCell = 30, show
     prev.current = new Map(curr.current)
     curr.current = new Map(frame.robots.map((r) => [r.id, r.pos]))
     for (const r of frame.robots) {
-      const trail = trails.current.get(r.id) ?? []
+      let trail = trails.current.get(r.id) ?? []
       const last = trail[trail.length - 1]
-      if (!last || last[0] !== r.pos[0] || last[1] !== r.pos[1]) trail.push(r.pos)
+      const step = last ? Math.abs(last[0] - r.pos[0]) + Math.abs(last[1] - r.pos[1]) : 0
+      // A trail only joins neighbouring cells: after a multi-cell jump (fast
+      // playback skips frames) it restarts instead of drawing a diagonal.
+      if (step > 1) trail = []
+      if (!last || step !== 0) trail.push(r.pos)
       trails.current.set(r.id, trail.slice(-TRAIL))
     }
   }, [frame])
