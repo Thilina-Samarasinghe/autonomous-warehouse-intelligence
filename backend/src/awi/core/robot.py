@@ -17,11 +17,18 @@ class RobotState(StrEnum):
     DROPPING = "dropping"
     TO_CHARGER = "to_charger"  # used from phase 6 (battery management)
     CHARGING = "charging"
+    TO_PARK = "to_park"
+    """No task: clearing a station or pick point. Can be re-tasked at any time."""
 
 
 MOVING_STATES: frozenset[RobotState] = frozenset(
-    {RobotState.TO_PICKUP, RobotState.TO_DROP, RobotState.TO_CHARGER}
+    {RobotState.TO_PICKUP, RobotState.TO_DROP, RobotState.TO_CHARGER, RobotState.TO_PARK}
 )
+FREE_STATES: frozenset[RobotState] = frozenset({RobotState.IDLE, RobotState.TO_PARK})
+"""States without a task: these robots can be assigned work."""
+PATH_STATES: frozenset[RobotState] = MOVING_STATES | {RobotState.IDLE}
+"""States in which a robot may follow a planned path. Idle robots can be told to
+move aside by coordinated planners."""
 
 
 @dataclass(slots=True)

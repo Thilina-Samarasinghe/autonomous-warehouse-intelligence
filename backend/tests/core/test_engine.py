@@ -10,7 +10,7 @@ from awi.core.engine import Simulation, SimulationError, resolve_moves
 from awi.core.grid import Grid
 from awi.core.layout import Layout
 from awi.core.render import render_ascii, robot_glyph
-from awi.core.robot import RobotState
+from awi.core.robot import FREE_STATES, RobotState
 from awi.core.task import TaskStatus
 from awi.core.types import manhattan
 from tests.conftest import SMALL_LAYOUT
@@ -79,7 +79,15 @@ D......
 def test_single_robot_delivery_timing() -> None:
     """delivered_t == created_t + d(spawn->pickup) + d(pickup->drop) + pick + drop - 1."""
     layout = Layout.from_grid(Grid.from_ascii(TINY_MAP))
-    cfg = SimConfig(num_robots=1, task_rate=5.0, max_tasks=1, pick_ticks=2, drop_ticks=1, seed=4)
+    cfg = SimConfig(
+        num_robots=1,
+        task_rate=5.0,
+        max_tasks=1,
+        pick_ticks=2,
+        drop_ticks=1,
+        seed=4,
+        park_idle=False,
+    )
     sim = Simulation(cfg, layout=layout)
     start = sim.world.robots[0].pos
     sim.run(60)
@@ -97,6 +105,29 @@ def test_single_robot_delivery_timing() -> None:
     assert robot.distance == d1 + d2
     assert robot.deliveries == 1
     assert robot.blocked_ticks == 0
+
+
+def test_idle_robot_parks_off_the_drop_station() -> None:
+    layout = Layout.from_grid(Grid.from_ascii(TINY_MAP))
+    sim = Simulation(SimConfig(num_robots=1, task_rate=5.0, max_tasks=1, seed=4), layout=layout)
+    sim.run(80)
+    robot, task = sim.world.robots[0], sim.world.tasks[0]
+    assert task.status is TaskStatus.DELIVERED
+    assert robot.state is RobotState.IDLE
+    assert robot.pos != task.dropoff
+    assert robot.pos in layout.parking_cells
+    assert all(manhattan(robot.pos, d) >= 2 for d in layout.drop_stations)
+
+
+def test_parking_robot_can_be_reassigned() -> None:
+    layout = Layout.from_grid(Grid.from_ascii(TINY_MAP))
+    sim = Simulation(SimConfig(num_robots=1, task_rate=0.5, max_tasks=6, seed=1), layout=layout)
+    states: set[RobotState] = set()
+    for _ in range(400):
+        sim.step()
+        states.add(sim.world.robots[0].state)
+    assert RobotState.TO_PARK in states
+    assert all(t.status is TaskStatus.DELIVERED for t in sim.world.tasks.values())
 
 
 def test_zero_service_time() -> None:
@@ -213,7 +244,7 @@ def test_physical_and_bookkeeping_invariants(
         assert set(world.pending) == {i for i, t in tasks.items() if t.status is TaskStatus.PENDING}
         for r in world.robots.values():
             assert r.carrying == (r.state in (RobotState.TO_DROP, RobotState.DROPPING))
-            if r.state is RobotState.IDLE:
+            if r.state in FREE_STATES:
                 assert r.task_id is None
             else:
                 assert r.task_id is not None and tasks[r.task_id].robot_id == r.id

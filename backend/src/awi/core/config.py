@@ -26,6 +26,9 @@ class SimConfig(BaseModel):
     stuck_replan_ticks: int = Field(
         3, ge=1, description="Replan around other robots after being blocked this long"
     )
+    park_idle: bool = Field(
+        True, description="Idle robots on a station/pick point drive to a parking cell"
+    )
     validate_paths: bool = Field(True, description="Check planner output every tick")
 
     @classmethod

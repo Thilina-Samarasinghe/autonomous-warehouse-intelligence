@@ -24,7 +24,7 @@ import numpy as np
 
 from awi.core.conflicts import robots_in_cycles
 from awi.core.engine import Simulation, TickReport
-from awi.core.robot import MOVING_STATES, RobotState
+from awi.core.robot import FREE_STATES, MOVING_STATES
 from awi.core.types import RobotId
 
 
@@ -233,7 +233,7 @@ class MetricsCollector:
                 "moves": w.moves,
                 "plan_ms": w.plan_ms,
                 "pending": len(world.pending),
-                "idle_robots": sum(r.state is RobotState.IDLE for r in robots),
+                "idle_robots": sum(r.state in FREE_STATES for r in robots),
                 "moving_robots": sum(r.state in MOVING_STATES for r in robots),
                 "deadlocked_robots": sum(
                     s >= self.config.deadlock_ticks for s in self._in_cycle_for.values()

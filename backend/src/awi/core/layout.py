@@ -67,6 +67,8 @@ class Layout:
     chargers: tuple[Cell, ...]
     spawn_cells: tuple[Cell, ...]
     """Plain floor cells in the bottom zone, used for initial robot placement."""
+    parking_cells: tuple[Cell, ...] = ()
+    """Floor cells where idle robots may wait without blocking stations or aisles."""
 
     @classmethod
     def from_grid(cls, grid: Grid) -> Layout:
@@ -89,6 +91,7 @@ class Layout:
             drop_stations=tuple(grid.cells_of_type(CellType.DROP)),
             chargers=tuple(grid.cells_of_type(CellType.CHARGER)),
             spawn_cells=tuple(grid.cells_of_type(CellType.FLOOR)),
+            parking_cells=_parking(grid, grid.cells_of_type(CellType.FLOOR)),
         )
 
 
@@ -136,6 +139,11 @@ def generate_layout(cfg: LayoutConfig | None = None) -> Layout:
         if grid.cell_type((r, c)) is CellType.FLOOR
     )
     shelves.sort()
+    open_zones = [
+        c
+        for c in grid.cells_of_type(CellType.FLOOR)
+        if c[0] < cfg.top_zone_rows or c[0] >= bottom_start
+    ]
     return Layout(
         grid=grid,
         shelves=tuple(shelves),
@@ -143,4 +151,13 @@ def generate_layout(cfg: LayoutConfig | None = None) -> Layout:
         drop_stations=tuple(drops),
         chargers=tuple(chargers),
         spawn_cells=spawn,
+        parking_cells=_parking(grid, open_zones),
+    )
+
+
+def _parking(grid: Grid, candidates: list[Cell]) -> tuple[Cell, ...]:
+    """Candidates at least 2 steps (Manhattan) away from every drop station / charger."""
+    stations = grid.cells_of_type(CellType.DROP) + grid.cells_of_type(CellType.CHARGER)
+    return tuple(
+        c for c in candidates if all(abs(c[0] - s[0]) + abs(c[1] - s[1]) >= 2 for s in stations)
     )

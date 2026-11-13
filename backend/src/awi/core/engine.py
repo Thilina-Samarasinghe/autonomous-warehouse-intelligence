@@ -33,7 +33,7 @@ from awi.core.grid import CellType
 from awi.core.layout import Layout, generate_layout
 from awi.core.orders import TaskGenerator
 from awi.core.rng import make_rng
-from awi.core.robot import MOVING_STATES, Robot, RobotState
+from awi.core.robot import FREE_STATES, MOVING_STATES, PATH_STATES, Robot, RobotState
 from awi.core.task import TaskStatus
 from awi.core.types import Cell, RobotId, TaskId, manhattan
 from awi.core.world import World
@@ -115,11 +115,13 @@ class Simulation:
         report = TickReport(t=self.world.t)
         self._generate_tasks(report)
         self._assign_tasks(report)
+        if self.config.park_idle:
+            self._park_idle_robots()
         self._plan_paths(report)
         self._move_robots(report)
         self._service_robots(report)
         for r in self.world.robots.values():
-            if r.state is RobotState.IDLE:
+            if r.state in FREE_STATES:
                 r.idle_ticks += 1
             else:
                 r.busy_ticks += 1
@@ -174,6 +176,23 @@ class Simulation:
         assigned = set(assignment.values())
         self.world.pending = [tid for tid in self.world.pending if tid not in assigned]
 
+    def _park_idle_robots(self) -> None:
+        """Send unassigned robots off stations and pick points to the nearest free
+        parking cell, so they don't block the next robot's goal."""
+        grid = self.layout.grid
+        taken = {r.pos for r in self.world.robots.values()} | {
+            r.goal for r in self.world.robots.values() if r.state is RobotState.TO_PARK
+        }
+        for r in self._robots():
+            if r.state is not RobotState.IDLE or grid.cell_type(r.pos) is CellType.FLOOR:
+                continue
+            free = [c for c in self.layout.parking_cells if c not in taken]
+            if not free:
+                continue
+            spot = min(free, key=lambda c: (manhattan(r.pos, c), c))
+            taken.add(spot)
+            self._set_goal(r, RobotState.TO_PARK, spot)
+
     def _plan_paths(self, report: TickReport) -> None:
         threshold = self.config.stuck_replan_ticks
         requests: list[PathRequest] = []
@@ -193,8 +212,8 @@ class Simulation:
         requested = {req.robot_id for req in requests}
         for rid, path in sorted(paths.items()):
             robot = self.world.robots.get(rid)
-            if robot is None or robot.state not in MOVING_STATES:
-                raise SimulationError(f"planner returned a path for non-moving robot {rid}")
+            if robot is None or robot.state not in PATH_STATES:
+                raise SimulationError(f"planner returned a path for busy robot {rid}")
             if self.config.validate_paths:
                 self._validate_path(robot, path)
             robot.path = deque(path)
@@ -208,9 +227,7 @@ class Simulation:
     def _move_robots(self, report: TickReport) -> None:
         robots = self._robots()
         current = {r.id: r.pos for r in robots}
-        intent = {
-            r.id: (r.path[0] if r.state in MOVING_STATES and r.path else r.pos) for r in robots
-        }
+        intent = {r.id: (r.path[0] if r.state in PATH_STATES and r.path else r.pos) for r in robots}
         report.vertex_conflicts, report.edge_conflicts = count_conflicts(current, intent)
         final, blocked = resolve_moves(current, intent)
         report.waits_for = wait_for_graph(current, intent, final, blocked)
@@ -223,9 +240,9 @@ class Simulation:
                 r.stuck_ticks += 1
                 report.blocked.append(r.id)
                 continue
-            if r.state in MOVING_STATES and r.path:
+            if r.state in PATH_STATES and r.path:
                 r.path.popleft()
-                if nxt == r.pos:  # planned wait
+                if nxt == r.pos and r.state in MOVING_STATES:  # planned wait
                     r.wait_ticks += 1
             if nxt != r.pos:
                 r.pos = nxt
@@ -247,6 +264,9 @@ class Simulation:
                 r.path.clear()
                 if r.service_left <= 0:
                     self._finish_service(r, report)
+            elif r.state is RobotState.TO_PARK and r.pos == r.goal:
+                r.state, r.goal = RobotState.IDLE, None
+                r.path.clear()
             elif r.state is RobotState.TO_DROP and r.pos == r.goal:
                 r.state, r.service_left, r.goal = RobotState.DROPPING, cfg.drop_ticks, None
                 r.path.clear()

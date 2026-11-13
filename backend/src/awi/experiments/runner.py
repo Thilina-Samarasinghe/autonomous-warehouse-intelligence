@@ -130,9 +130,27 @@ def run_single(spec: RunSpec) -> RunResult:
         "seed": cfg.seed,
         "task_rate": cfg.task_rate,
     }
-    row = {**keys, "ticks": spec.ticks, **collector.result().as_dict(), "wall_seconds": wall}
+    row = {
+        **keys,
+        "ticks": spec.ticks,
+        **collector.result().as_dict(),
+        **_planner_stats(sim.planner),
+        "wall_seconds": wall,
+    }
     series = [{**keys, **w} for w in collector.timeseries()]
     return RunResult(row=row, series=series)
+
+
+def _planner_stats(planner: object) -> dict[str, float]:
+    """Coordinated-planner health: how often CBS fell back / a plan failed."""
+    stats = getattr(planner, "stats", None)
+    calls = getattr(stats, "calls", 0)
+    if not calls:
+        return {"fallback_rate": 0.0, "failure_rate": 0.0}
+    return {
+        "fallback_rate": getattr(stats, "fallbacks", 0) / calls,
+        "failure_rate": getattr(stats, "failures", 0) / calls,
+    }
 
 
 def run_experiment(

@@ -1,0 +1,14 @@
+# The main experiment: independent vs coordinated planning across fleet sizes.
+# Every planner sees the same seeds, so the task streams and spawn positions are identical.
+name: comparison
+description: Independent A* vs Prioritized Planning vs windowed CBS, 10/20/30 robots.
+planners: [independent_astar, prioritized, cbs]
+robots: [10, 20, 30]
+seeds: 10
+ticks: 3000
+warmup_ticks: 300
+task_rate_per_robot: 0.015
+base:
+  zipf_s: 1.0
+  pick_ticks: 2
+  drop_ticks: 1

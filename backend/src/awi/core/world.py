@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from awi.core.layout import Layout
-from awi.core.robot import Robot, RobotState
+from awi.core.robot import FREE_STATES, Robot
 from awi.core.task import Task
 from awi.core.types import Cell, RobotId, TaskId
 from awi.planning.dijkstra import DistanceMaps
@@ -26,7 +26,8 @@ class World:
         return {r.pos: r.id for r in self.robots.values()}
 
     def idle_robots(self) -> list[Robot]:
-        return [r for r in self.robots.values() if r.state is RobotState.IDLE]
+        """Robots without a task (idle or parking): available for assignment."""
+        return [r for r in self.robots.values() if r.state in FREE_STATES]
 
     def pending_tasks(self) -> list[Task]:
         return [self.tasks[i] for i in self.pending]

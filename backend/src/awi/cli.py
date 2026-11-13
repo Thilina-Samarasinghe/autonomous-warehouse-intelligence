@@ -10,6 +10,7 @@ from awi.core.config import SimConfig
 from awi.core.engine import Simulation
 from awi.core.render import render_ascii
 from awi.planning.base import PathPlanner
+from awi.planning.coordinated import CBSPlanner, PrioritizedPlanner
 from awi.planning.independent import IndependentAStarPlanner
 from awi.planning.naive import BFSPlanner
 
@@ -22,7 +23,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, help="random seed")
     p.add_argument("--rate", type=float, help="expected new tasks per tick")
     p.add_argument(
-        "--planner", choices=["astar", "bfs"], default="astar", help="path planner (default: astar)"
+        "--planner",
+        choices=["astar", "bfs", "prioritized", "cbs"],
+        default="astar",
+        help="path planner (default: astar)",
     )
     p.add_argument(
         "--pick-cost",
@@ -49,6 +53,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     planner: PathPlanner
     if args.planner == "bfs":
         planner = BFSPlanner(seed=cfg.seed)
+    elif args.planner == "prioritized":
+        planner = PrioritizedPlanner()
+    elif args.planner == "cbs":
+        planner = CBSPlanner()
     else:
         planner = IndependentAStarPlanner(seed=cfg.seed, pick_cell_cost=args.pick_cost)
     sim = Simulation(cfg, planner=planner)
