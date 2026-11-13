@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisco
 from pydantic import ValidationError
 
 from awi import __version__
+from awi.api.optimize import OptimizeRequest, optimize_slotting
 from awi.api.schemas import (
     ControlRequest,
     HealthResponse,
@@ -153,6 +154,19 @@ def add_obstacles(session_id: str, body: ObstacleRequest, request: Request) -> O
     session = _session(request, session_id)
     blocked = session.add_blockage([tuple(c) for c in body.cells], body.duration)  # type: ignore[misc]
     return ObstacleResponse(blocked=blocked)
+
+
+# ------------------------------------------------------------- optimise
+
+
+@router.post("/api/optimize/slotting", tags=["optimisation"])
+async def optimize(body: OptimizeRequest) -> dict[str, Any]:
+    """Run the slotting GA and compare it with random and travel-optimal slotting,
+    optionally validated by short simulations (``validate_ticks``)."""
+    try:
+        return await asyncio.to_thread(optimize_slotting, body)
+    except SessionError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from None
 
 
 # -------------------------------------------------------------- websocket

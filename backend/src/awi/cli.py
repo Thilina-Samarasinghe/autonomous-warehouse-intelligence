@@ -43,6 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--capacity", type=int, help="items per robot trip (batching)")
     p.add_argument("--battery", action="store_true", help="enable battery management")
+    p.add_argument("--slotting", choices=["random", "closest", "ga"], help="SKU slotting strategy")
     p.add_argument(
         "--render-every", type=int, default=0, metavar="N", help="print the map every N ticks"
     )
@@ -65,6 +66,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     data = cfg.model_dump() | overrides
     if args.battery:
         data["battery"] = {**data["battery"], "enabled": True}
+    if args.slotting:
+        data["slotting"] = {**data["slotting"], "strategy": args.slotting}
     cfg = SimConfig.model_validate(data)
 
     planner: PathPlanner

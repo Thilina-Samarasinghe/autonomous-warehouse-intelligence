@@ -368,6 +368,31 @@ canvas.map.clickable {
 .chart-legend {
   margin-top: 6px;
 }
+.heatmaps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+  margin-top: 8px;
+}
+.heatmap canvas {
+  display: block;
+  border-radius: 6px;
+}
+.heat-scale {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+.heat-scale .bar {
+  width: 140px;
+  height: 10px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--surface-1), var(--series-1));
+  border: 1px solid var(--border);
+}
 .swatch.shelf {
   border-radius: 2px;
   background: var(--map-shelf);

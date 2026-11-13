@@ -165,3 +165,26 @@ def test_websocket_unknown_session(client: TestClient) -> None:
     with client.websocket_connect("/ws/sessions/nope") as ws:
         msg = ws.receive_json()
         assert msg["type"] == "error"
+
+
+def test_optimize_slotting(client: TestClient) -> None:
+    body = {
+        "config": {"layout": SMALL_LAYOUT.model_dump(), "num_robots": 4, "task_rate": 0.1},
+        "generations": 15,
+        "population": 12,
+        "validate_ticks": 120,
+        "planner": "prioritized",
+    }
+    resp = client.post("/api/optimize/slotting", json=body)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert set(data["strategies"]) == {"random", "closest", "ga"}
+    n = len(data["shelves"])
+    for s in data["strategies"].values():
+        assert len(s["demand"]) == n and abs(sum(s["demand"]) - 1) < 1e-9
+        assert {"throughput_per_1k", "delivery_time_mean"} <= set(s["simulation"])
+    assert data["strategies"]["ga"]["fitness"] <= data["strategies"]["closest"]["fitness"] + 1e-9
+    assert len(data["history"]["best"]) == 15
+    assert data["layout"]["width"] == SMALL_LAYOUT.width
+    bad = client.post("/api/optimize/slotting", json={"planner": "nope"})
+    assert bad.status_code == 422

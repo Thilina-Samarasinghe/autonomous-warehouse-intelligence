@@ -158,7 +158,49 @@ uv run awi-exp run scenarios/experiments/dynamics.yaml --workers 6     # ~8 min,
 
 ---
 
-## 5. Independent-planning baseline (phase 3, re-run with parking)
+## 5. SKU slotting and the genetic algorithm (phase 10)
+
+```bash
+uv run awi-exp run scenarios/experiments/slotting.yaml --workers 6     # ~10 min, 160 runs
+```
+
+**Setup:** 192 shelves, Zipf demand (s = 1). A *slotting* decides which shelf holds which popularity rank. Every strategy sees the same seeds, so order arrival times and packing stations are identical and only the shelf each order hits changes. Hungarian assignment, 3,000 ticks, 10 seeds.
+
+- *random*: unplanned (the default everywhere else in this report);
+- *closest*: the hottest product on the shelf nearest the stations, and so on. This is optimal for travel alone (rearrangement inequality);
+- *GA*: genetic algorithm (OX1 crossover, swap and inversion mutation, tournament selection, elitism; 60 × 150, about 0.6 s). It minimises `travel × (1 + λ × (aisle concentration − 1))`, where concentration is the normalised Herfindahl index of demand per pick aisle (1 = evenly spread). λ = 0.05 (*ga_light*) and λ = 0.5 (*ga_balanced*).
+
+Proxy scores (λ = 0.5): random travel 18.2 / concentration 2.00; closest 11.5 / 3.37; GA 14.6 / 1.49. The GA finds a real trade-off on the proxy, and it reproduces the closest optimum exactly when λ = 0.
+
+| Robots | Planner | Slotting | Throughput / 1k (95% CI) | Avg delivery | Distance / delivery | Gridlocked |
+|---:|---|---|---|---:|---:|---:|
+| 20 | Independent A* | random | 172.8 [96.8, 248.8] | 270.7 | 108.3 | 3/10 |
+| 20 | Independent A* | **closest** | **295.4** [289.0, 301.8] | **45.0** | **33.3** | 0/10 |
+| 20 | Independent A* | ga_light | 265.1 [205.1, 325.2] | 91.4 | 42.1 | 1/10 |
+| 20 | Independent A* | ga_balanced | 270.9 [237.9, 303.9] | 71.7 | 45.4 | 1/10 |
+| 20 | Prioritized | random | 283.4 [276.3, 290.4] | 120.0 | 54.7 | 0/10 |
+| 20 | Prioritized | **closest** | **295.0** [288.3, 301.6] | **48.4** | **39.5** | 0/10 |
+| 20 | Prioritized | ga_light | 295.1 [288.4, 301.9] | 49.3 | 40.0 | 0/10 |
+| 20 | Prioritized | ga_balanced | 293.8 [287.7, 299.9] | 64.8 | 47.3 | 0/10 |
+| 30 | Independent A* | random | 113.9 [24.8, 203.1] | 451.9 | 187.3 | 6/10 |
+| 30 | Independent A* | **closest** | **279.2** [207.3, 351.1] | **278.5** | **55.3** | 2/10 |
+| 30 | Independent A* | ga_light | 211.7 [113.5, 309.9] | 357.0 | 60.0 | 4/10 |
+| 30 | Independent A* | ga_balanced | 202.1 [123.3, 280.9] | 424.0 | 66.5 | 2/10 |
+| 30 | Prioritized | random | 372.2 [362.5, 382.0] | 295.0 | 65.3 | 0/10 |
+| 30 | Prioritized | **closest** | **440.9** [435.1, 446.7] | **60.6** | **49.7** | 0/10 |
+| 30 | Prioritized | ga_light | 440.2 [433.9, 446.5] | 63.2 | 50.8 | 0/10 |
+| 30 | Prioritized | ga_balanced | 431.5 [427.0, 435.9] | 108.1 | 55.6 | 0/10 |
+
+### Findings
+
+1. **Slotting is one of the biggest levers in the whole system.** Moving from random to closest slotting raises throughput by **+71% (20 robots) and +145% (30 robots)** for independent fleets and removes most of their gridlocks. For coordinated fleets it adds +4% / +18% throughput and makes deliveries **60–80% faster** (all p ≤ 0.004). A 30-robot coordinated fleet with closest slotting delivers 440.9 per 1k ticks, the best result in this report.
+2. **Spreading demand over aisles does *not* help: the congestion hypothesis is falsified.** The GA's congestion penalty never beats travel-optimal slotting in simulation. At λ = 0.5 it is significantly worse (coordinated, 30 robots: −2.1% throughput and +78% delivery time, p = 0.002). With λ = 0.05 it is statistically indistinguishable from closest.
+3. **Why:** the gridlocks of earlier experiments were not caused by hot products being *bunched*. They were caused by robots driving *deep into* the rack area to randomly placed hot shelves, through narrow pick aisles crossed by everyone else. Closest slotting keeps the busiest traffic in the open top zone next to the stations. The coordinated planner handles the remaining local congestion easily.
+4. **Lesson for optimisation work:** the GA optimised its proxy very well (−22% fitness against random). It is the proxy that encoded a wrong belief about what causes congestion. Validating candidates by simulation, which the dashboard's Optimise view does too, is what exposed this. A natural next step would be to evolve slotting with a simulation-based fitness, or to let the GA optimise station positions as well, an objective that greedy slotting cannot solve.
+
+---
+
+## 6. Independent-planning baseline (phase 3, re-run with parking)
 
 ```bash
 uv run awi-exp run scenarios/experiments/baseline_sweep.yaml --workers 6

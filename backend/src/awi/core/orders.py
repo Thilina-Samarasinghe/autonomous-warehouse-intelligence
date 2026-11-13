@@ -16,7 +16,11 @@ class TaskGenerator:
     * Shelf popularity follows a Zipf law with exponent ``zipf_s``: the k-th most
       popular shelf is picked with probability proportional to ``1 / k**s``
       (``s = 0`` gives uniform demand). Which shelf is "hot" is a random
-      permutation drawn from the generator's own stream.
+      permutation drawn from the generator's own stream, unless a planned
+      ``assignment`` (rank -> shelf index, see :mod:`awi.optimization.slotting`)
+      is given. The permutation is drawn either way, so the arrival times and
+      drop stations stay identical across slotting strategies (paired
+      comparisons).
     * Drop stations are chosen uniformly.
     """
 
@@ -25,8 +29,10 @@ class TaskGenerator:
         layout: Layout,
         rng: np.random.Generator,
         rate: float,
+        *,
         zipf_s: float = 1.0,
         max_tasks: int | None = None,
+        assignment: NDArray[np.int64] | None = None,
     ) -> None:
         if rate <= 0:
             raise ValueError("rate must be positive")
@@ -41,8 +47,14 @@ class TaskGenerator:
         n = len(layout.shelves)
         weights = 1.0 / np.arange(1, n + 1, dtype=np.float64) ** zipf_s
         weights /= weights.sum()
+        drawn = rng.permutation(n)
+        self.random_assignment: NDArray[np.int64] = drawn.astype(np.int64)
+        if assignment is not None:
+            if sorted(assignment.tolist()) != list(range(n)):
+                raise ValueError("assignment must be a permutation of the shelf indices")
+            drawn = assignment
         probs = np.empty(n, dtype=np.float64)
-        probs[rng.permutation(n)] = weights
+        probs[drawn] = weights
         self._probs: NDArray[np.float64] = probs
 
     @property

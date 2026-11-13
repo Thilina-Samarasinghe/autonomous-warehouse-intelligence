@@ -1,4 +1,4 @@
-import type { Cell, Options, SessionRequest, SessionStatus } from './types'
+import type { Cell, OptimizeRequest, OptimizeResponse, Options, SessionRequest, SessionStatus } from './types'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -29,6 +29,8 @@ export const api = {
   createSession: (body: SessionRequest) =>
     request<SessionStatus>('/api/sessions', { method: 'POST', body: JSON.stringify(body) }),
   deleteSession: (id: string) => request<void>(`/api/sessions/${id}`, { method: 'DELETE' }),
+  optimize: (body: OptimizeRequest) =>
+    request<OptimizeResponse>('/api/optimize/slotting', { method: 'POST', body: JSON.stringify(body) }),
   addObstacles: (id: string, cells: Cell[], duration: number) =>
     request<{ blocked: Cell[] }>(`/api/sessions/${id}/obstacles`, {
       method: 'POST',

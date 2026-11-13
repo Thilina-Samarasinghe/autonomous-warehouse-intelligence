@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from awi.core.layout import LayoutConfig
 from awi.dynamics.obstacles import DynamicsConfig
 from awi.energy.battery import BatteryConfig
+from awi.optimization.slotting import SlottingConfig
 
 
 class SimConfig(BaseModel):
@@ -34,6 +35,7 @@ class SimConfig(BaseModel):
     )
     battery: BatteryConfig = Field(default_factory=BatteryConfig)
     dynamics: DynamicsConfig = Field(default_factory=DynamicsConfig)
+    slotting: SlottingConfig = Field(default_factory=SlottingConfig)
     validate_paths: bool = Field(True, description="Check planner output every tick")
 
     @classmethod

@@ -87,6 +87,41 @@ export interface SessionRequest {
   config: Record<string, unknown>
 }
 
+export interface StrategyResult {
+  fitness: number
+  travel: number
+  concentration: number
+  demand: number[]
+  simulation?: {
+    throughput_per_1k: number | null
+    delivery_time_mean: number | null
+    distance_per_delivery: number | null
+    conflicts_total: number
+  }
+}
+
+export interface OptimizeRequest {
+  config: Record<string, unknown>
+  congestion_weight: number
+  generations: number
+  population: number
+  validate_ticks: number
+  planner: string
+}
+
+export interface OptimizeResponse {
+  layout: Layout
+  shelves: Cell[]
+  n_aisles: number
+  congestion_weight: number
+  strategies: Record<'random' | 'closest' | 'ga', StrategyResult>
+  history: { best: number[]; mean: number[] }
+  evaluations: number
+  ga_seconds: number
+  planner: string
+  validate_ticks: number
+}
+
 export type WsCommand =
   | { action: 'start'; speed?: number }
   | { action: 'pause' }

@@ -25,6 +25,9 @@ from collections import defaultdict, deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+import numpy as np
+from numpy.typing import NDArray
+
 from awi.assignment.base import TaskAssigner
 from awi.assignment.greedy import GreedyNearestAssigner
 from awi.core.config import SimConfig
@@ -41,6 +44,8 @@ from awi.core.world import World
 from awi.dynamics.obstacles import Dynamics, DynamicsConfig
 from awi.energy.battery import BatteryModel
 from awi.energy.charging import dispatch_chargers
+from awi.optimization.ga import GAConfig, genetic_slotting
+from awi.optimization.slotting import SlottingProblem
 from awi.planning.base import PathPlanner, PathRequest
 from awi.planning.dijkstra import DistanceMaps
 from awi.planning.independent import IndependentAStarPlanner
@@ -108,17 +113,20 @@ class Simulation:
         self.layout = layout or generate_layout(self.config.layout)
         self.planner: PathPlanner = planner or IndependentAStarPlanner(seed=self.config.seed)
         self.assigner: TaskAssigner = assigner or GreedyNearestAssigner()
+        distances = DistanceMaps.for_layout(self.layout)
+        self.slotting = plan_slotting(self.config, self.layout, distances)
         self.task_generator = TaskGenerator(
             self.layout,
             make_rng(self.config.seed, "tasks"),
             rate=self.config.task_rate,
             zipf_s=self.config.zipf_s,
             max_tasks=self.config.max_tasks,
+            assignment=self.slotting,
         )
         self.world = World(
             layout=self.layout,
             robots=self._spawn_robots(),
-            distances=DistanceMaps.for_layout(self.layout),
+            distances=distances,
         )
         dcfg = self.config.dynamics
         if dcfg.enabled:
@@ -530,6 +538,20 @@ class Simulation:
         else:
             cells = primary + extra[: n - len(primary)]
         return {i: Robot(id=i, pos=c) for i, c in enumerate(cells)}
+
+
+def plan_slotting(
+    config: SimConfig, layout: Layout, distances: DistanceMaps
+) -> NDArray[np.int64] | None:
+    """Planned SKU slotting for the configured strategy (``None`` = random)."""
+    scfg = config.slotting
+    if scfg.strategy == "random":
+        return None
+    problem = SlottingProblem(layout, distances, config.zipf_s, scfg.congestion_weight)
+    if scfg.strategy == "closest":
+        return problem.closest_assignment()
+    ga = GAConfig(population=scfg.population, generations=scfg.generations)
+    return genetic_slotting(problem, ga, make_rng(config.seed, "slotting")).best
 
 
 def resolve_moves(

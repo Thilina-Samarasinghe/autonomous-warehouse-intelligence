@@ -1,0 +1,20 @@
+# SKU slotting: random (unplanned) vs travel-optimal vs GA with an aisle-congestion
+# penalty. Same seeds, so every strategy sees the same order arrivals and stations;
+# only which shelf each order hits changes.
+name: slotting
+description: Random vs closest vs GA slotting (two congestion weights), independent vs prioritized.
+planners: [independent_astar, prioritized]
+assigners: [hungarian]
+robots: [20, 30]
+seeds: 10
+ticks: 3000
+warmup_ticks: 300
+task_rate_per_robot: 0.015
+variants:
+  random: {}
+  closest:
+    slotting: {strategy: closest}
+  ga_light:
+    slotting: {strategy: ga, congestion_weight: 0.05}
+  ga_balanced:
+    slotting: {strategy: ga, congestion_weight: 0.5}

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Thilina-Samarasinghe/autonomous-warehouse-intelligence/actions/workflows/ci.yml/badge.svg?branch=development)](https://github.com/Thilina-Samarasinghe/autonomous-warehouse-intelligence/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12-blue)
-![Tests](https://img.shields.io/badge/tests-180%2B%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-190%2B%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)
 ![Typed](https://img.shields.io/badge/mypy-strict-blue)
 
@@ -57,13 +57,14 @@ All differences: Wilcoxon signed-rank p = 0.002, Cliff's |d| ≈ 1.0. The full a
 | **Simulation** | Deterministic discrete-time grid engine; procedural warehouse layouts (racks, pick aisles, cross-aisles, packing stations, chargers, parking); seeded order stream with Poisson arrivals and Zipf (ABC-style) SKU popularity |
 | **Safety** | The engine is the physical arbiter: vertex (same cell) and edge (swap) conflicts can never happen. Every refused move is counted, so "collisions" can be measured without crashing anything |
 | **Path planning** | Dijkstra cost-to-go maps (NetworkX), A\*, Space-Time A\*, a reactive independent planner (detour and random yield), Prioritized Planning, windowed **Conflict-Based Search** with bypass, target reasoning and a conflict-avoidance table |
+| **Layout optimisation** | SKU slotting: random, travel-optimal greedy, and a **genetic algorithm** (OX1 crossover, swap/inversion mutation, tournament selection, elitism) balancing travel against aisle congestion, validated by simulation |
 | **Task assignment** | Greedy FIFO baseline, **Hungarian algorithm** (SciPy), **OR-Tools CP-SAT**, **OR-Tools order batching** (pickup-and-delivery VRP; robots carry several items per trip) |
 | **Energy** | Battery model (drain per move, extra drain when loaded, idle drain), feasibility check before every assignment, urgency-ordered charger queue with preemption, emergency charging with cargo aboard |
 | **Dynamic obstacles** | People / forklifts walking the aisles with a robot keep-out safety zone, random temporary aisle blockages (connectivity-preserving), obstacles injected by hand via the API |
 | **Metrics** | Delivery-time percentiles, throughput, would-be collisions, wait-for-graph deadlock detection, distance, idle/wait/blocked time, planner CPU time, energy KPIs, obstacle KPIs, windowed time series |
 | **Experiments** | YAML specs over a planner × assigner × variant × fleet size × seed grid, parallel execution, Parquet output, paired statistics (95% CI, Wilcoxon, Mann–Whitney U, Cliff's delta) |
 | **Service** | FastAPI REST API and WebSocket streaming of live frames (robots with planned paths, people, blockages, KPIs) |
-| **Dashboard** | React + TypeScript + Canvas live map, run controls, click-to-block aisles, KPI tiles, Plotly charts, and a side-by-side comparison of two strategies stepped in lockstep; light and dark themes |
+| **Dashboard** | React + TypeScript + Canvas live map, run controls, click-to-block aisles, KPI tiles, Plotly charts, a side-by-side comparison of two strategies stepped in lockstep, and a slotting optimiser with demand heatmaps and GA convergence; light and dark themes |
 
 ---
 
@@ -174,6 +175,13 @@ CBS (Sharon et al., 2015) searches a **constraint tree**. The root holds every r
 - **OR-Tools CP-SAT:** the same optimisation as an integer program (Boolean `x[r, j]`, at most one per row and column, maximise matches and then minimise cost). It reaches the same optimum as Hungarian (checked against brute force) and is the extension point for constraints Hungarian can't express.
 - **Order batching** (pickup-and-delivery VRP, OR-Tools routing): each free robot is a vehicle with capacity *c*. Every order is a pickup node and a drop node, which must be served by the same robot, pickup first. Routes are open-ended, and leaving an order out costs a penalty that grows with its age. The search is deterministic (cheapest insertion followed by greedy descent, with a limit on the number of solutions). With *c* = 2 it is the strongest strategy under load.
 
+### SKU slotting and the genetic algorithm
+Which shelf holds which product matters as much as how robots drive. A *slotting* is a permutation that maps popularity ranks to shelves. Every candidate is scored on a fast proxy built from the Dijkstra maps:
+- **Travel:** demand-weighted distance from each pick point to the packing stations;
+- **Aisle concentration:** normalised Herfindahl index of demand per pick aisle (1 = evenly spread).
+
+*Closest* slotting (hottest product nearest the stations) is provably optimal for travel alone. The **genetic algorithm** (Holland, 1975; Goldberg, 1989) searches permutations for the best trade-off: `fitness = travel × (1 + λ × (concentration − 1))`. Its operators are order crossover OX1 (Davis, 1985), swap and inversion mutation, size-3 tournament selection and 2-elitism, with the population seeded with the greedy solution. 60 individuals × 150 generations take about 0.6 s. The slotting changes only *which shelf* each order hits: arrival times and stations come from the same random draws, so comparisons stay paired. Candidates are then **validated in simulation**. This is what showed that the congestion term, plausible as it sounds, does not pay off (see Results).
+
 ### Battery management
 - **Energy model:** 0.1 per move, +0.05 per item carried, 0.01 per tick idle, +1.0 per tick on a charger.
 - **Feasibility before assignment:** a robot only takes a route if it can do `pickup → drop → nearest charger` times a 1.3 safety margin and still keep a 10% reserve.
@@ -218,6 +226,7 @@ Full tables, confidence intervals and discussion: **[docs/RESULTS.md](docs/RESUL
 4. **Order batching beats optimal one-to-one assignment.** With 2 items per trip, throughput is **+54%** and delivery time **−78%** at 20 robots. Hungarian beats greedy by about 5%, and CP-SAT matches Hungarian exactly.
 5. **Energy management is safe and cheap.** 0 stranded robots in 80 long runs. It costs nothing at 10 robots and 5.7% at 20 robots, but halving the number of chargers costs a further 18%, so charger count must scale with fleet size.
 6. **Coordinated fleets stay productive around people and blocked aisles.** 0 gridlocks in 100 obstacle runs, against 18 for independent planning. At 20 robots with 12 people, the coordinated fleet delivers **3.8× more** (p = 0.002). Blockages cost it under 1%. This depends on a robot keep-out zone around people, and on moving robots *out* of a zone when a person walks up to them. Without these, robots box people in and wait forever (see [Results §4](docs/RESULTS.md)).
+7. **Where products sit matters as much as how robots drive.** Travel-optimal slotting raises independent-fleet throughput by up to **2.5×** and makes coordinated deliveries 60–80% faster. A GA that also spreads demand over aisles scores well on its proxy but *loses* in simulation. Congestion came from long trips into the racks, not from bunched demand, and simulation-based validation exposed the wrong assumption.
 
 ---
 
@@ -236,6 +245,10 @@ Full tables, confidence intervals and discussion: **[docs/RESULTS.md](docs/RESUL
 
 **Compare view.** Two strategies run on **the same seed**: the same warehouse, orders, people and blockages. The browser steps both in **lockstep**, so they always show the same tick. A head-to-head table shows the relative difference for every KPI (improvements in green, regressions in red), and the charts overlay deliveries and would-be collisions. Above, after 573 ticks, both fleets have delivered 72 orders. Independent A* needed 290 engine interventions to avoid collisions; prioritized planning needed none, and delivered 18% faster.
 
+![Optimise view: GA slotting compared with random and closest slotting](docs/images/dashboard-optimize.png)
+
+**Optimise view.** Runs the slotting GA with your λ, generations and population, and scores random, closest and GA slotting on the proxy. It can also validate each one with a short simulation on the same seed. Demand heatmaps show where the hot products end up, and the convergence chart shows the best and mean fitness per generation. Above: the GA wins on its proxy (green fitness), but the simulation columns show closest slotting delivering faster.
+
 Colours follow a validated palette: three categorical hues tested for colour-vision deficiency in both modes, plus a neutral gray. State is never shown by colour alone; legends, tooltips and the fleet table carry it as text. Dark mode has its own validated colour steps:
 
 <p align="center"><img src="docs/images/dashboard-dark.png" alt="Dashboard in dark mode" width="720"></p>
@@ -250,7 +263,7 @@ Colours follow a validated palette: three categorical hues tested for colour-vis
 git clone https://github.com/Thilina-Samarasinghe/autonomous-warehouse-intelligence.git
 cd autonomous-warehouse-intelligence/backend
 uv sync                                     # creates .venv and installs locked dependencies
-uv run pytest                               # optional: run the 180+ tests
+uv run pytest                               # optional: run the 190+ tests
 uv run awi-sim --robots 10 --ticks 1000     # first simulation
 ```
 
@@ -275,8 +288,9 @@ uv run awi-sim --planner cbs --assigner hungarian --robots 10 --ticks 1000
 uv run awi-sim --planner prioritized --assigner batching --capacity 2 --ticks 1000
 uv run awi-sim --planner prioritized --assigner hungarian --battery --ticks 4000
 uv run awi-sim --config scenarios/stress_30.yaml --ticks 3000          # YAML scenario
+uv run awi-sim --planner prioritized --assigner hungarian --slotting ga --robots 30   # GA slotting
 ```
-Options: `--planner {astar,bfs,prioritized,cbs}`, `--assigner {greedy,hungarian,cpsat,batching}`, `--robots`, `--rate`, `--seed`, `--capacity`, `--battery`, `--pick-cost`, `--render-every`, `--config`.
+Options: `--planner {astar,bfs,prioritized,cbs}`, `--assigner {greedy,hungarian,cpsat,batching}`, `--slotting {random,closest,ga}`, `--robots`, `--rate`, `--seed`, `--capacity`, `--battery`, `--pick-cost`, `--render-every`, `--config`.
 
 ASCII legend: `#` shelf · `+` pick point · `D` station · `C` charger · `H` person · `X` blockage · `0-9a-z` robots.
 
@@ -318,7 +332,8 @@ Results land in `backend/results/<name>/`: `runs.parquet` (one row of KPIs per r
 | `comparison.yaml` | **Independent vs PP vs CBS** at 10/20/30 robots | 90 | 28 min |
 | `assignment.yaml` | Greedy vs Hungarian vs CP-SAT vs batching | 80 | 5 min |
 | `battery.yaml` | Battery off/on, 2 vs 4 chargers, thresholds | 80 | 6 min |
-| `dynamics.yaml` | People and blockages, independent vs coordinated | 200 | 6 min |
+| `dynamics.yaml` | People and blockages, independent vs coordinated | 200 | 8 min |
+| `slotting.yaml` | Random vs closest vs GA slotting | 160 | 10 min |
 
 \* on a 4-core i5 laptop with 6 workers.
 
@@ -341,6 +356,7 @@ Results land in `backend/results/<name>/`: `runs.parquet` (one row of KPIs per r
 | `POST` | `/api/sessions/{id}/step` | Advance `{ticks}` (while paused) |
 | `POST` | `/api/sessions/{id}/control` | `{action: start \| pause \| reset, speed}` |
 | `POST` | `/api/sessions/{id}/obstacles` | Close aisle cells `{cells: [[r, c], ...], duration}` |
+| `POST` | `/api/optimize/slotting` | Run the slotting GA vs random/closest, optionally validated by simulation `{config, congestion_weight, generations, population, validate_ticks, planner}` |
 | `WS` | `/ws/sessions/{id}` | Live stream: `layout` message, then `frame` messages (≤ 20 fps). Accepts `{action: start\|pause\|reset\|step\|speed, ticks, speed}` |
 
 Several sessions can run at once, for example independent vs coordinated side by side on the same seed. Simulation steps run in a worker thread under a per-session lock, so a heavy CBS tick never blocks the server. Slow WebSocket clients skip stale frames instead of slowing the simulation. Example frame (abridged):
@@ -367,6 +383,7 @@ backend/
                    MAPF model, Prioritized Planning, CBS
     assignment/    cost model, greedy, Hungarian, CP-SAT, OR-Tools order batching
     energy/        battery model, charger dispatch
+    optimization/  slotting problem (travel + aisle concentration), permutation GA
     dynamics/      people, safety zones, aisle blockages
     metrics/       per-run KPI collector and time series
     experiments/   YAML specs, parallel runner, statistics, strategy registry, CLI
@@ -376,7 +393,7 @@ backend/
 frontend/
   src/api/         typed REST client and WebSocket hook (frame batching, lockstep requests)
   src/components/  warehouse canvas, Plotly wrapper, charts, KPI tiles, legends, forms, tables
-  src/views/       Live and Compare views
+  src/views/       Live, Compare and Optimise views
   src/lib/         state groups, chart history buffer, scenario mapping, theme hook
 docs/              implementation plan, results
 ```
@@ -385,7 +402,7 @@ docs/              implementation plan, results
 
 ## Quality and testing
 
-- **180+ tests, 97% coverage**, including property-based tests (Hypothesis) of the key invariants:
+- **190+ tests, 97% coverage**, including property-based tests (Hypothesis) of the key invariants:
   - robots never share a cell or swap places, under thousands of random scenarios;
   - A\* path length equals BFS on random maps;
   - Prioritized Planning and CBS solutions are conflict-free on random instances, and an optimally solved CBS plan never costs more than PP's;
@@ -418,6 +435,7 @@ npm test && npm run lint && npm run build
 
 ## Limitations and roadmap
 
+- The slotting GA optimises a proxy, and the experiments show its congestion term encodes the wrong mechanism. A **simulation-based fitness** (expensive, but parallelisable) or a joint optimisation of **station positions** would make the GA more than a cross-check on the greedy optimum.
 - **Plain CBS does not scale past about 10–15 robots** in this setting. Bounded-suboptimal **ECBS** (Barer et al., 2014) or PBS would be the next step.
 - People are treated as static within a planning window. **Predicting human motion** would let robots plan around them more smoothly. With many people, delivery times still roughly double.
 - Movement is grid-based with unit-time moves; there is no rotation, acceleration or continuous kinematics.
@@ -431,7 +449,7 @@ npm test && npm run lint && npm run build
 | 7 · Dynamic obstacles | ✅ |
 | 8 · FastAPI REST + WebSocket streaming | ✅ |
 | 9 · Live dashboard (React + Canvas + Plotly) | ✅ |
-| 10 · Genetic algorithm for layout / SKU slotting | ⏳ |
+| 10 · Genetic algorithm for layout / SKU slotting | ✅ |
 | 11–12 · Final report, Docker, demo | ⏳ |
 
 ---
@@ -459,6 +477,12 @@ npm test && npm run lint && npm run build
 15. M. W. P. Savelsbergh, M. Sol. *The General Pickup and Delivery Problem.* Transportation Science, 29(1):17–29, 1995.
 16. R. de Koster, T. Le-Duc, K. J. Roodbergen. *Design and Control of Warehouse Order Picking: A Literature Review.* European Journal of Operational Research, 182(2):481–501, 2007. (Order batching, ABC demand)
 17. P. R. Wurman, R. D'Andrea, M. Mountz. *Coordinating Hundreds of Cooperative, Autonomous Vehicles in Warehouses.* AI Magazine, 29(1):9–20, 2008. (Kiva Systems)
+
+**Genetic algorithms**
+
+25. J. H. Holland. *Adaptation in Natural and Artificial Systems.* University of Michigan Press, 1975.
+26. D. E. Goldberg. *Genetic Algorithms in Search, Optimization, and Machine Learning.* Addison-Wesley, 1989.
+27. L. Davis. *Applying Adaptive Algorithms to Epistatic Domains.* IJCAI, 1985. (Order crossover, OX)
 
 **Statistics**
 

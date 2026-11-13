@@ -3,15 +3,17 @@ import { api } from './api/client'
 import type { Options } from './api/types'
 import { CompareView } from './views/CompareView'
 import { LiveView } from './views/LiveView'
+import { OptimizeView } from './views/OptimizeView'
 
-type Tab = 'live' | 'compare'
+type Tab = 'live' | 'compare' | 'optimize'
 type Backend = { kind: 'loading' } | { kind: 'ok'; version: string; options: Options } | { kind: 'error'; message: string }
 
 const TAB_KEY = 'awi.tab'
 
 function savedTab(): Tab {
   try {
-    return localStorage.getItem(TAB_KEY) === 'compare' ? 'compare' : 'live'
+    const t = localStorage.getItem(TAB_KEY)
+    return t === 'compare' || t === 'optimize' ? t : 'live'
   } catch {
     return 'live'
   }
@@ -54,6 +56,9 @@ export default function App() {
           <button className={tab === 'compare' ? 'tab active' : 'tab'} onClick={() => choose('compare')}>
             Compare
           </button>
+          <button className={tab === 'optimize' ? 'tab active' : 'tab'} onClick={() => choose('optimize')}>
+            Optimise
+          </button>
         </nav>
         <div className="backend">
           {backend.kind === 'ok' && <span className="ok">● API v{backend.version}</span>}
@@ -70,7 +75,9 @@ export default function App() {
           </p>
         </section>
       )}
-      {backend.kind === 'ok' && (tab === 'live' ? <LiveView options={backend.options} /> : <CompareView options={backend.options} />)}
+      {backend.kind === 'ok' && tab === 'live' && <LiveView options={backend.options} />}
+      {backend.kind === 'ok' && tab === 'compare' && <CompareView options={backend.options} />}
+      {backend.kind === 'ok' && tab === 'optimize' && <OptimizeView options={backend.options} />}
     </div>
   )
 }

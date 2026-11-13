@@ -22,6 +22,7 @@ from typing import Any
 from awi.core.config import SimConfig
 from awi.core.engine import Simulation
 from awi.core.grid import CellType
+from awi.core.layout import Layout
 from awi.core.types import Cell
 from awi.experiments.registry import ASSIGNERS, PLANNERS, make_assigner, make_planner
 from awi.experiments.runner import deep_merge
@@ -42,6 +43,20 @@ KPI_FIELDS = (
     "plan_ms_mean",
     "stranded_robots",
 )
+
+
+def layout_payload(layout: Layout) -> dict[str, Any]:
+    """Static map as JSON: cell types, stations, chargers, parking cells."""
+    grid = layout.grid
+    return {
+        "width": grid.width,
+        "height": grid.height,
+        "cells": grid.cells.tolist(),
+        "cell_types": {t.name.lower(): int(t) for t in CellType},
+        "drop_stations": [_cell(c) for c in layout.drop_stations],
+        "chargers": [_cell(c) for c in layout.chargers],
+        "parking": [_cell(c) for c in layout.parking_cells],
+    }
 
 
 class SessionError(ValueError):
@@ -138,17 +153,7 @@ class Session:
         }
 
     def layout(self) -> dict[str, Any]:
-        layout = self.sim.layout
-        grid = layout.grid
-        return {
-            "width": grid.width,
-            "height": grid.height,
-            "cells": grid.cells.tolist(),
-            "cell_types": {t.name.lower(): int(t) for t in CellType},
-            "drop_stations": [_cell(c) for c in layout.drop_stations],
-            "chargers": [_cell(c) for c in layout.chargers],
-            "parking": [_cell(c) for c in layout.parking_cells],
-        }
+        return layout_payload(self.sim.layout)
 
     def frame(self) -> dict[str, Any]:
         with self._lock:
