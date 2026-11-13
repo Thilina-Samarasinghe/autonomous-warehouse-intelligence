@@ -8,12 +8,15 @@ from awi.core.layout import Layout
 from awi.core.robot import Robot, RobotState
 from awi.core.task import Task
 from awi.core.types import Cell, RobotId, TaskId
+from awi.planning.dijkstra import DistanceMaps
 
 
 @dataclass(slots=True)
 class World:
     layout: Layout
     robots: dict[RobotId, Robot]
+    distances: DistanceMaps
+    """Uniform-cost Dijkstra maps shared by planners, assigners and metrics."""
     tasks: dict[TaskId, Task] = field(default_factory=dict)
     pending: list[TaskId] = field(default_factory=list)
     """Unassigned task ids, oldest first."""

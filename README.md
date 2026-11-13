@@ -82,7 +82,7 @@ CI (GitHub Actions) runs the same checks on every push and pull request.
 
 - [x] Phase 0: project setup, tooling, CI
 - [x] Phase 1: core simulation engine
-- [ ] Phase 2: Dijkstra + A\* (independent planning)
+- [x] Phase 2: Dijkstra + A\* (independent planning)
 - [ ] Phase 3: metrics + headless experiment runner
 - [ ] Phase 4: Space-Time A\*, Prioritized Planning, CBS
 - [ ] Phase 5: task assignment (Hungarian, CP-SAT, VRP batching)

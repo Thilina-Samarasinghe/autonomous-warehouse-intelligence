@@ -36,7 +36,8 @@ from awi.core.task import TaskStatus
 from awi.core.types import Cell, RobotId, TaskId, manhattan
 from awi.core.world import World
 from awi.planning.base import PathPlanner, PathRequest
-from awi.planning.naive import BFSPlanner
+from awi.planning.dijkstra import DistanceMaps
+from awi.planning.independent import IndependentAStarPlanner
 
 
 class SimulationError(RuntimeError):
@@ -79,7 +80,7 @@ class Simulation:
     ) -> None:
         self.config = config or SimConfig()
         self.layout = layout or generate_layout(self.config.layout)
-        self.planner: PathPlanner = planner or BFSPlanner(seed=self.config.seed)
+        self.planner: PathPlanner = planner or IndependentAStarPlanner(seed=self.config.seed)
         self.assigner: TaskAssigner = assigner or GreedyNearestAssigner()
         self.task_generator = TaskGenerator(
             self.layout,
@@ -88,7 +89,11 @@ class Simulation:
             zipf_s=self.config.zipf_s,
             max_tasks=self.config.max_tasks,
         )
-        self.world = World(layout=self.layout, robots=self._spawn_robots())
+        self.world = World(
+            layout=self.layout,
+            robots=self._spawn_robots(),
+            distances=DistanceMaps.for_layout(self.layout),
+        )
 
     # ------------------------------------------------------------------ public
     @property

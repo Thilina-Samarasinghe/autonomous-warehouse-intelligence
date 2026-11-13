@@ -9,6 +9,9 @@ from collections.abc import Sequence
 from awi.core.config import SimConfig
 from awi.core.engine import Simulation
 from awi.core.render import render_ascii
+from awi.planning.base import PathPlanner
+from awi.planning.independent import IndependentAStarPlanner
+from awi.planning.naive import BFSPlanner
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -18,6 +21,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ticks", type=int, default=500, help="ticks to simulate")
     p.add_argument("--seed", type=int, help="random seed")
     p.add_argument("--rate", type=float, help="expected new tasks per tick")
+    p.add_argument(
+        "--planner", choices=["astar", "bfs"], default="astar", help="path planner (default: astar)"
+    )
+    p.add_argument(
+        "--pick-cost",
+        type=float,
+        default=1.0,
+        help="A* cost of entering pick-aisle cells (>1 discourages through-traffic)",
+    )
     p.add_argument(
         "--render-every", type=int, default=0, metavar="N", help="print the map every N ticks"
     )
@@ -34,7 +46,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     }
     cfg = SimConfig.model_validate(cfg.model_dump() | overrides)
 
-    sim = Simulation(cfg)
+    planner: PathPlanner
+    if args.planner == "bfs":
+        planner = BFSPlanner(seed=cfg.seed)
+    else:
+        planner = IndependentAStarPlanner(seed=cfg.seed, pick_cell_cost=args.pick_cost)
+    sim = Simulation(cfg, planner=planner)
     start = time.perf_counter()
     for _ in range(args.ticks):
         sim.step()
@@ -44,7 +61,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     s = sim.summary()
     avg = f"{s.avg_delivery_time:.1f}" if s.avg_delivery_time is not None else "n/a"
-    print(f"robots={cfg.num_robots} seed={cfg.seed} ticks={s.ticks} ({s.ticks / elapsed:,.0f}/s)")
+    print(
+        f"planner={args.planner} robots={cfg.num_robots} seed={cfg.seed} "
+        f"ticks={s.ticks} ({s.ticks / elapsed:,.0f}/s)"
+    )
     print(
         f"tasks: generated={s.tasks_generated} delivered={s.tasks_delivered} "
         f"in_progress={s.tasks_in_progress} pending={s.tasks_pending}"
