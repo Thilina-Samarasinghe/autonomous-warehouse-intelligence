@@ -108,7 +108,57 @@ uv run awi-exp run scenarios/experiments/battery.yaml --workers 6     # ~6 min
 
 ---
 
-## 4. Independent-planning baseline (phase 3, re-run with parking)
+## 4. Dynamic obstacles: people and blocked aisles (phase 7)
+
+```bash
+uv run awi-exp run scenarios/experiments/dynamics.yaml --workers 6     # ~8 min, 200 runs
+```
+
+**Setup:** Hungarian assignment, 3,000 ticks, 10 seeds. Variants:
+- *static*: no obstacles;
+- *6 / 12 people*: people walking the aisles (random walk with momentum). Robots may not *enter* a person's cell or the cells next to it (safety radius 1), and coordinated planners move robots out of a zone a person walks into;
+- *blockages*: on average one new 3-cell aisle blockage every 100 ticks, lasting 150 ticks, at most 2 at a time;
+- *6 people + blockages*: both.
+
+| Robots | Planner | Variant | Throughput / 1k (95% CI) | vs static | Avg delivery | Robot conflicts* | Gridlocked |
+|---:|---|---|---|---:|---:|---:|---:|
+| 10 | Independent A* | static | 146.9 [142.8, 151.1] | | 65.8 | 2,095 | 0/10 |
+| 10 | Independent A* | 6 people | 142.4 [138.4, 146.5] | −3.1% | 119.2 | 2,704 | 0/10 |
+| 10 | Independent A* | 12 people | 118.3 [112.4, 124.3] | −19.5% | 337.0 | 3,366 | 0/10 |
+| 10 | Independent A* | blockages | 138.8 [123.0, 154.6] | −5.5% | 83.0 | 2,865 | 1/10 |
+| 10 | Independent A* | 6 people + blockages | 137.5 [132.3, 142.8] | −6.4% | 167.9 | 2,828 | 0/10 |
+| 10 | **Prioritized** | static | 148.8 [143.8, 153.7] | | 46.6 | 0 | 0/10 |
+| 10 | **Prioritized** | 6 people | 147.8 [143.1, 152.4] | −0.7% | 59.3 | 0 | 0/10 |
+| 10 | **Prioritized** | 12 people | 145.5 [141.9, 149.0] | −2.2% | 85.4 | 5 | 0/10 |
+| 10 | **Prioritized** | blockages | 148.4 [143.6, 153.3] | −0.2% | 52.4 | 0 | 0/10 |
+| 10 | **Prioritized** | 6 people + blockages | 147.7 [143.0, 152.5] | −0.7% | 68.4 | 3 | 0/10 |
+| 20 | Independent A* | static | 172.8 [96.8, 248.8] | | 270.7 | 12,165 | 3/10 |
+| 20 | Independent A* | 6 people | 106.4 [52.7, 160.2] | −38.4% | 481.1 | 16,604 | 5/10 |
+| 20 | Independent A* | 12 people | 63.4 [21.8, 105.1] | −63.3% | 1,044.7 | 18,309 | 2/10 |
+| 20 | Independent A* | blockages | 161.2 [85.3, 237.1] | −6.7% | 290.2 | 12,311 | 4/10 |
+| 20 | Independent A* | 6 people + blockages | 103.3 [51.7, 154.9] | −40.2% | 720.8 | 16,070 | 3/10 |
+| 20 | **Prioritized** | static | 283.4 [276.3, 290.4] | | 120.0 | 0 | 0/10 |
+| 20 | **Prioritized** | 6 people | 268.6 [260.6, 276.6] | −5.2% | 188.6 | 2 | 0/10 |
+| 20 | **Prioritized** | 12 people | 243.7 [235.3, 252.2] | −14.0% | 305.8 | 15 | 0/10 |
+| 20 | **Prioritized** | blockages | 281.3 [274.3, 288.3] | −0.7% | 135.3 | 0 | 0/10 |
+| 20 | **Prioritized** | 6 people + blockages | 261.7 [252.5, 270.8] | −7.7% | 213.4 | 5 | 0/10 |
+
+\* Would-be robot–robot conflicts per run. People make the world non-deterministic for the planner, so even coordinated plans occasionally break. The engine still prevents every collision.
+
+### Findings
+
+1. **A coordinated fleet never gridlocked, in 100 of 100 obstacle runs.** Independent A* gridlocked in 18 of 100.
+2. **Coordinated planning beats independent planning in every obstacle scenario.** At 20 robots, prioritized planning delivers **+152% (6 people), +284% (12 people) and +75% (blockages)** compared with independent A*, with 53 to 71% lower delivery times (all p = 0.002, Cliff's d ≥ 0.95).
+3. **Blockages are nearly free for a coordinated fleet** (−0.2% to −0.7%, not significant). The whole fleet replans around a closed aisle within one commit window. Independent robots lose 6 to 7% and still gridlock.
+4. **People are the harder disturbance**, because they move unpredictably and the planner only knows where they are now. Coordinated throughput drops by 2% (10 robots, 12 people) to 14% (20 robots, 12 people), and delivery times roughly double. Independent fleets lose up to 63%.
+5. **Two rules make people manageable** (both found by this experiment and its property tests):
+   - **Safety zone.** A first version treated each person's cell as a plain obstacle. Coordinated robots queued tightly around people in one-cell-wide aisles, the person could never step anywhere again, and the robots waited forever: with 12 people, half the coordinated runs gridlocked. A keep-out radius of one cell (standard AMR safety practice) fixed most of it.
+   - **Leave the zone.** A person could still get boxed in when they walked between two waiting robots. Coordinated planners now move a robot *out* of any zone a person walks into. Result: 0 gridlocks, and at 20 robots with 12 people throughput rose from 189.7 to 243.7 per 1k ticks.
+6. The price is a small rate of planning failures: up to 8% of replans in the densest runs. These are robots trapped between a person and a wall, which simply wait one window.
+
+---
+
+## 5. Independent-planning baseline (phase 3, re-run with parking)
 
 ```bash
 uv run awi-exp run scenarios/experiments/baseline_sweep.yaml --workers 6

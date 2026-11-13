@@ -70,6 +70,13 @@ def build_instance(world: World) -> Instance:
             agents.append(Agent(rid, r.pos, r.pos, AgentKind.IDLE))
         else:
             static.add(r.pos)
+    # Humans and blockages are treated as static for the window. Humans move, but
+    # the fleet replans every few ticks anyway, and on every obstacle block.
+    # Robots standing inside a person's safety zone are planned *out* of it (their
+    # own cell is forbidden from t=1), so a person can never be boxed in by
+    # waiting robots. A robot with no way out keeps its cell (PP falls back to a
+    # wait).
+    static |= world.blocked_cells()
     return Instance(tuple(agents), frozenset(static))
 
 

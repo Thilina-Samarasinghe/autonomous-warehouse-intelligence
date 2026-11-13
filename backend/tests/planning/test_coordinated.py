@@ -2,7 +2,7 @@ import itertools
 
 import numpy as np
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
 from awi.core.config import SimConfig
@@ -175,6 +175,7 @@ def instances(draw: st.DrawFn) -> tuple[Grid, DistanceMaps, Instance]:
     ).reshape(h, w)
     grid = Grid(arr)
     free = grid.passable_cells()
+    assume(len(free) >= 4)  # room for at least two robots with distinct goals
     n = draw(st.integers(2, min(6, len(free) // 2)))
     starts = draw(st.lists(st.sampled_from(free), min_size=n, max_size=n, unique=True))
     goals = draw(st.lists(st.sampled_from(free), min_size=n, max_size=n, unique=True))

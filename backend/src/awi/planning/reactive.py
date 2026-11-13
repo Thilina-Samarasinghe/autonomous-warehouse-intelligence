@@ -56,21 +56,28 @@ class ReactivePlanner(ABC):
         t0 = time.perf_counter()
         grid = world.layout.grid
         occupied = world.occupancy()
+        obstacles = world.blocked_cells()
         paths: dict[RobotId, list[Cell]] = {}
         for req in requests:
             path: list[Cell] | None = None
             if req.stuck:
-                blocked = {c for c, rid in occupied.items() if rid != req.robot_id}
+                blocked = {c for c, rid in occupied.items() if rid != req.robot_id} | obstacles
                 path = self.shortest_path(world, req.start, req.goal, blocked)
                 if path and path[0] in occupied:
                     path = None  # only "detour" is into an occupied goal: useless
                 if path is None:
-                    free = [nb for nb in grid.neighbors(req.start) if nb not in occupied]
+                    free = [
+                        nb
+                        for nb in grid.neighbors(req.start)
+                        if nb not in occupied and nb not in obstacles
+                    ]
                     if free and self._rng.random() < self.yield_prob:
                         step = free[int(self._rng.integers(len(free)))]
-                        rest = self.shortest_path(world, step, req.goal) or []
+                        rest = self.shortest_path(world, step, req.goal, obstacles) or []
                         paths[req.robot_id] = [step, *rest]
                         continue
+            if path is None and obstacles:
+                path = self.shortest_path(world, req.start, req.goal, obstacles)
             if path is None:
                 path = self.shortest_path(world, req.start, req.goal)
             paths[req.robot_id] = path or []

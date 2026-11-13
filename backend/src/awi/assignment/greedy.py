@@ -17,9 +17,12 @@ class GreedyNearestAssigner:
     ) -> dict[RobotId, TaskId]:
         free = sorted(robots, key=lambda r: r.id)
         result: dict[RobotId, TaskId] = {}
+        blocked = world.blocked_cells()
         for task in sorted(tasks, key=lambda t: (t.created_t, t.id)):
             if not free:
                 break
+            if task.pickup in blocked:
+                continue
             battery = world.battery
             able = [
                 r for r in free if battery is None or battery.can_afford(r, single_task_route(task))

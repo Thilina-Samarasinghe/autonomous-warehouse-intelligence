@@ -63,6 +63,9 @@ class _Constraints:
 
 
 class CoordinatedPlanner(ABC):
+    replan_on_block = True
+    """A blocked robot breaks the joint plan, so the whole fleet replans."""
+
     def __init__(
         self, horizon: int = 10, commit_steps: int = 4, max_expansions: int = 20_000
     ) -> None:
@@ -326,7 +329,7 @@ def _branches(
 ) -> list[tuple[RobotId, _Constraints]]:
     """The two child constraints that resolve conflict ``c``.
 
-    Target reasoning (Li et al., 2019): if one robot of a vertex conflict is a task
+    Target reasoning (Li et al., ICAPS 2020): if one robot of a vertex conflict is a task
     robot standing on *its own goal*, the absorbing-goal rule means it stays there
     until the horizon. The other robot is then forbidden from that cell for the
     whole rest of the window (``t..horizon``) instead of one tick at a time. This

@@ -5,6 +5,7 @@
 * Travel is the true shortest-path distance (cached Dijkstra maps), not Manhattan.
 * Pairs the robot cannot afford on its battery (route plus the trip to a charger,
   with a safety margin) are marked unreachable.
+* Tasks whose pick point is currently blocked are skipped until it reopens.
 * The age term rewards serving old tasks. When there are more tasks than robots,
   this stops far-away tasks from starving. Matching every robot shifts each
   column by a constant, so the term only decides *which* tasks are served.
@@ -35,8 +36,12 @@ def cost_matrix(
     world: World, robots: Sequence[Robot], tasks: Sequence[Task], age_weight: float
 ) -> NDArray[np.float64]:
     battery = world.battery
+    blocked = world.blocked_cells()
     cost = np.empty((len(robots), len(tasks)), dtype=np.float64)
     for j, task in enumerate(tasks):
+        if task.pickup in blocked:  # pick point behind a blockage or a person
+            cost[:, j] = UNREACHABLE
+            continue
         to_pickup = world.distances.to(task.pickup)
         age = world.t - task.created_t
         route = single_task_route(task)

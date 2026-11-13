@@ -1,7 +1,8 @@
 """ASCII renderer for debugging and the CLI.
 
 Legend: ``#`` shelf · ``+`` pick point · ``D`` drop station · ``C`` charger ·
-``.`` floor · robots shown as ``0-9a-z`` then ``A-Z`` (cycling).
+``.`` floor · ``H`` human · ``X`` blockage · robots shown as ``0-9a-z``
+then ``A-Z`` (cycling).
 """
 
 from __future__ import annotations
@@ -19,6 +20,11 @@ def robot_glyph(robot_id: int) -> str:
 def render_ascii(world: World, *, legend: bool = True) -> str:
     grid = world.layout.grid
     rows = [[CELL_CHARS[CellType(v)] for v in row] for row in grid.cells.tolist()]
+    if world.dynamics is not None:
+        for row, col in world.dynamics.blockages:
+            rows[row][col] = "X"
+        for h in world.dynamics.humans:
+            rows[h.pos[0]][h.pos[1]] = "H"
     for r in world.robots.values():
         rows[r.pos[0]][r.pos[1]] = robot_glyph(r.id)
     lines = ["".join(row) for row in rows]

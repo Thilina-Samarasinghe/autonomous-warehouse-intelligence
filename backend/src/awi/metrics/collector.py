@@ -84,6 +84,10 @@ class RunMetrics:
     energy_rejections: int = 0
     stranded_robots: int = 0
     preemptions: int = 0
+    # dynamic obstacles
+    obstacle_blocks: int = 0
+    obstacle_replans: int = 0
+    blockage_events: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -128,6 +132,9 @@ class MetricsCollector:
     _rejections: int = 0
     _stranded: int = 0
     _preempted: int = 0
+    _obstacle_blocks: int = 0
+    _obstacle_replans: int = 0
+    _blockages: int = 0
     _min_battery: float = math.inf
     _in_cycle_for: dict[RobotId, int] = field(default_factory=dict)
     _deadlock_events: int = 0
@@ -155,6 +162,9 @@ class MetricsCollector:
         self._rejections += report.energy_rejections
         self._stranded += len(report.stranded)
         self._preempted += len(report.preempted)
+        self._obstacle_blocks += report.obstacle_blocks
+        self._obstacle_replans += report.obstacle_replans
+        self._blockages += report.blockages_started
         battery = self.sim.world.battery
         if battery is not None:
             low = min(r.battery for r in self.sim.world.robots.values()) / battery.capacity
@@ -232,6 +242,9 @@ class MetricsCollector:
             energy_rejections=self._rejections,
             stranded_robots=self._stranded,
             preemptions=self._preempted,
+            obstacle_blocks=self._obstacle_blocks,
+            obstacle_replans=self._obstacle_replans,
+            blockage_events=self._blockages,
         )
 
     def timeseries(self) -> list[dict[str, Any]]:

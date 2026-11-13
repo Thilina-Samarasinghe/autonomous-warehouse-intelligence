@@ -1,0 +1,21 @@
+# Dynamic obstacles: people walking the aisles and temporary blockages.
+# Independent vs coordinated planning, both with Hungarian assignment.
+name: dynamics
+description: Robustness to humans and aisle blockages, independent vs prioritized planning.
+planners: [independent_astar, prioritized]
+assigners: [hungarian]
+robots: [10, 20]
+seeds: 10
+ticks: 3000
+warmup_ticks: 300
+task_rate_per_robot: 0.015
+variants:
+  static: {}
+  humans_6:
+    dynamics: {enabled: true, humans: 6}
+  humans_12:
+    dynamics: {enabled: true, humans: 12}
+  blockages:
+    dynamics: {enabled: true, blockage_rate: 0.01, blockage_length: 3, blockage_duration: 150}
+  humans_6_blockages:
+    dynamics: {enabled: true, humans: 6, blockage_rate: 0.01, blockage_length: 3, blockage_duration: 150}

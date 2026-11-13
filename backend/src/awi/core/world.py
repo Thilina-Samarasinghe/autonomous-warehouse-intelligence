@@ -8,6 +8,7 @@ from awi.core.layout import Layout
 from awi.core.robot import FREE_STATES, Robot
 from awi.core.task import Task
 from awi.core.types import Cell, RobotId, TaskId
+from awi.dynamics.obstacles import Dynamics
 from awi.energy.battery import BatteryModel
 from awi.planning.dijkstra import DistanceMaps
 
@@ -24,6 +25,12 @@ class World:
     t: int = 0
     battery: BatteryModel | None = None
     """Energy model, or ``None`` when battery management is off."""
+    dynamics: Dynamics | None = None
+    """Humans and blockages, or ``None`` when there are no dynamic obstacles."""
+
+    def blocked_cells(self) -> set[Cell]:
+        """Cells robots may not enter right now (humans and blockages)."""
+        return self.dynamics.blocked_cells() if self.dynamics is not None else set()
 
     def occupancy(self) -> dict[Cell, RobotId]:
         return {r.pos: r.id for r in self.robots.values()}

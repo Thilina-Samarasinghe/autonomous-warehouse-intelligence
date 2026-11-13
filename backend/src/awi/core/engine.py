@@ -38,6 +38,7 @@ from awi.core.route import Route, StopKind, route_tasks, single_task_route, vali
 from awi.core.task import TaskStatus
 from awi.core.types import Cell, RobotId, TaskId, manhattan
 from awi.core.world import World
+from awi.dynamics.obstacles import Dynamics, DynamicsConfig
 from awi.energy.battery import BatteryModel
 from awi.energy.charging import dispatch_chargers
 from awi.planning.base import PathPlanner, PathRequest
@@ -73,6 +74,11 @@ class TickReport:
     """Assignments refused because the robot could not afford the route."""
     stranded: list[RobotId] = field(default_factory=list)
     preempted: list[RobotId] = field(default_factory=list)
+    obstacle_blocks: int = 0
+    """Robot moves rejected because a human or blockage was in the way."""
+    obstacle_replans: int = 0
+    """Paths invalidated because an obstacle appeared on them."""
+    blockages_started: int = 0
     """Robots that left a charger early to make room for an emergency."""
 
 
@@ -114,6 +120,12 @@ class Simulation:
             robots=self._spawn_robots(),
             distances=DistanceMaps.for_layout(self.layout),
         )
+        dcfg = self.config.dynamics
+        if dcfg.enabled:
+            self.world.dynamics = Dynamics(
+                dcfg, self.layout, make_rng(self.config.seed, "dynamics")
+            )
+            self.world.dynamics.spawn_humans({r.pos for r in self.world.robots.values()})
         bcfg = self.config.battery
         if bcfg.enabled:
             self.world.battery = BatteryModel(
@@ -138,6 +150,8 @@ class Simulation:
 
     def step(self) -> TickReport:
         report = TickReport(t=self.world.t)
+        if self.world.dynamics is not None:
+            self._update_dynamics(report)
         self._generate_tasks(report)
         if self.world.battery is not None:
             self._battery_policy(report)
@@ -288,9 +302,17 @@ class Simulation:
         robots = self._robots()
         current = {r.id: r.pos for r in robots}
         intent = {r.id: (r.path[0] if r.state in PATH_STATES and r.path else r.pos) for r in robots}
+        # Humans and blockages: moves into them are refused before robot arbitration.
+        obstacles = self.world.blocked_cells()
+        hit_obstacle = {rid for rid, c in intent.items() if c != current[rid] and c in obstacles}
+        for rid in hit_obstacle:
+            intent[rid] = current[rid]
+        report.obstacle_blocks = len(hit_obstacle)
         report.vertex_conflicts, report.edge_conflicts = count_conflicts(current, intent)
         final, blocked = resolve_moves(current, intent)
         report.waits_for = wait_for_graph(current, intent, final, blocked)
+        blocked |= hit_obstacle
+        replan_on_block = getattr(self.planner, "replan_on_block", False)
 
         for r in robots:
             nxt = final[r.id]
@@ -299,6 +321,8 @@ class Simulation:
                 r.blocked_ticks += 1
                 r.stuck_ticks += 1
                 report.blocked.append(r.id)
+                if replan_on_block or r.id in hit_obstacle:
+                    self._invalidate_path(r)
                 continue
             if r.state in PATH_STATES and r.path:
                 r.path.popleft()
@@ -355,6 +379,37 @@ class Simulation:
             r.deliveries += 1
             report.delivered.append(task.id)
         self._head_to_next_stop(r)
+
+    # -------------------------------------------------------------- dynamics
+    def _update_dynamics(self, report: TickReport) -> None:
+        """Move humans, open/close blockages, and invalidate paths through them."""
+        dynamics = self.world.dynamics
+        assert dynamics is not None
+        events = dynamics.step(self.world.t, [r.pos for r in self.world.robots.values()])
+        report.blockages_started = len(events.blockages_started)
+        blocked = dynamics.blocked_cells()
+        for r in self._robots():
+            if r.path and any(c in blocked for c in r.path):
+                self._invalidate_path(r)
+                report.obstacle_replans += 1
+
+    def _invalidate_path(self, r: Robot) -> None:
+        """Moving robots ask for a new path; idle robots just stop following theirs."""
+        if r.state is RobotState.IDLE:
+            r.path.clear()
+        elif r.state in MOVING_STATES:
+            r.needs_replan = True
+
+    def add_blockage(self, cells: list[Cell], duration: int) -> list[Cell]:
+        """Close ``cells`` for ``duration`` ticks (e.g. from the dashboard). Cells
+        occupied by robots are skipped. Returns the cells actually blocked."""
+        if self.world.dynamics is None:
+            self.world.dynamics = Dynamics(
+                DynamicsConfig(), self.layout, make_rng(self.config.seed, "dynamics")
+            )
+        occupied = {r.pos for r in self.world.robots.values()}
+        free = [c for c in cells if c not in occupied]
+        return self.world.dynamics.add_blockage(free, self.world.t + duration)
 
     # --------------------------------------------------------------- battery
     def _battery_policy(self, report: TickReport) -> None:

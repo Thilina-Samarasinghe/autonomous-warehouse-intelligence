@@ -8,6 +8,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from awi.core.layout import LayoutConfig
+from awi.dynamics.obstacles import DynamicsConfig
 from awi.energy.battery import BatteryConfig
 
 
@@ -32,6 +33,7 @@ class SimConfig(BaseModel):
         True, description="Idle robots on a station/pick point drive to a parking cell"
     )
     battery: BatteryConfig = Field(default_factory=BatteryConfig)
+    dynamics: DynamicsConfig = Field(default_factory=DynamicsConfig)
     validate_paths: bool = Field(True, description="Check planner output every tick")
 
     @classmethod
